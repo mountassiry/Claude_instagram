@@ -17,9 +17,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, MAX_CAPTION_LENGTH } from '../../config/constants';
-import { Button } from '../../components';
+import { Button, UserTagPicker } from '../../components';
 import { usePosts } from '../../hooks/usePosts';
 import { isVideo } from '../../utils/helpers';
+import { UserTag } from '../../types';
 
 type CreatePostScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -29,6 +30,7 @@ export const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ navigation }
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
   const [caption, setCaption] = useState('');
+  const [tags, setTags] = useState<UserTag[]>([]);
   const [loading, setLoading] = useState(false);
 
   const { createPost } = usePosts();
@@ -85,7 +87,7 @@ export const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ navigation }
 
     setLoading(true);
     try {
-      await createPost(mediaUri, mediaType, caption.trim());
+      await createPost(mediaUri, mediaType, caption.trim(), tags);
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create post. Please try again.');
@@ -97,6 +99,7 @@ export const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ navigation }
   const clearMedia = () => {
     setMediaUri(null);
     setCaption('');
+    setTags([]);
   };
 
   return (
@@ -123,7 +126,14 @@ export const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ navigation }
           {mediaUri ? (
             <View style={styles.mediaContainer}>
               {mediaType === 'image' ? (
-                <Image source={{ uri: mediaUri }} style={styles.media} />
+                <>
+                  <UserTagPicker
+                    imageUri={mediaUri}
+                    tags={tags}
+                    onTagsChange={setTags}
+                    editable
+                  />
+                </>
               ) : (
                 <Video
                   source={{ uri: mediaUri }}

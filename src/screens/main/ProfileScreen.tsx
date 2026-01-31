@@ -8,10 +8,14 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
   collection,
   query,
@@ -21,7 +25,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { COLORS, SPACING, FONT_SIZES } from '../../config/constants';
-import { Avatar, LoadingScreen, EmptyState } from '../../components';
+import { Avatar, LoadingScreen, EmptyState, Button } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
 import { Post } from '../../types';
 import { formatNumber } from '../../utils/helpers';
@@ -36,7 +40,12 @@ type ProfileScreenProps = {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAdmin } = useAuth();
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editedDisplayName, setEditedDisplayName] = useState('');
+  const [editedBio, setEditedBio] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { user, isAdmin, uploadProfilePicture, updateUserProfile } = useAuth();
 
   useEffect(() => {
     loadUserPosts();
@@ -82,6 +91,60 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     return posts.reduce((sum, post) => sum + post.likes.length, 0);
   };
 
+  const handleChangeProfilePicture = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setUploadingPhoto(true);
+      try {
+        await uploadProfilePicture(result.assets[0].uri);
+        Alert.alert('Success', 'Profile picture updated!');
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to upload profile picture');
+      } finally {
+        setUploadingPhoto(false);
+      }
+    }
+  };
+
+  const openEditModal = () => {
+    setEditedDisplayName(user?.displayName || '');
+    setEditedBio(user?.bio || '');
+    setEditModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editedDisplayName.trim()) {
+      Alert.alert('Error', 'Name cannot be empty');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateUserProfile({
+        displayName: editedDisplayName.trim(),
+        bio: editedBio.trim(),
+      });
+      setEditModalVisible(false);
+      Alert.alert('Success', 'Profile updated!');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return <LoadingScreen message="Loading profile..." />;
   }
@@ -96,15 +159,34 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       </View>
 
       <View style={styles.profileInfo}>
-        <Avatar uri={user?.photoURL} name={user?.displayName || 'User'} size={80} />
+        <TouchableOpacity onPress={handleChangeProfilePicture} disabled={uploadingPhoto}>
+          <View style={styles.avatarContainer}>
+            <Avatar uri={user?.photoURL} name={user?.displayName || 'User'} size={80} />
+            {uploadingPhoto ? (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator color={COLORS.white} />
+              </View>
+            ) : (
+              <View style={styles.avatarEditIcon}>
+                <Ionicons name="camera" size={16} color={COLORS.white} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
         <Text style={styles.displayName}>{user?.displayName}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
+        <Text style={styles.username}>@{user?.username}</Text>
+        {user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
         {isAdmin && (
           <View style={styles.adminBadge}>
             <Ionicons name="shield-checkmark" size={14} color={COLORS.white} />
             <Text style={styles.adminText}>Admin</Text>
           </View>
         )}
+
+        <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
+          <Ionicons name="pencil" size={16} color={COLORS.primary} />
+          <Text style={styles.editButtonText}>Edit Profile</Text>
+        </TouchableOpacity>
 
         <View style={styles.stats}>
           <View style={styles.statItem}>
@@ -118,6 +200,53 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           </View>
         </View>
       </View>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Display Name</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editedDisplayName}
+              onChangeText={setEditedDisplayName}
+              placeholder="Your name"
+              placeholderTextColor={COLORS.textLight}
+            />
+
+            <Text style={styles.inputLabel}>Bio</Text>
+            <TextInput
+              style={[styles.textInput, styles.bioInput]}
+              value={editedBio}
+              onChangeText={setEditedBio}
+              placeholder="Tell your family about yourself..."
+              placeholderTextColor={COLORS.textLight}
+              multiline
+              maxLength={150}
+            />
+            <Text style={styles.charCount}>{editedBio.length}/150</Text>
+
+            <Button
+              title="Save Changes"
+              onPress={handleSaveProfile}
+              loading={saving}
+              style={styles.saveButton}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.postsSection}>
         <Text style={styles.sectionTitle}>My Posts</Text>
@@ -169,16 +298,63 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     backgroundColor: COLORS.surface,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEditIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
   displayName: {
     fontSize: FONT_SIZES.xl,
     fontWeight: '600',
     color: COLORS.text,
     marginTop: SPACING.md,
   },
-  email: {
+  username: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.primary,
+    marginTop: SPACING.xs,
+  },
+  bio: {
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 20,
+    marginTop: SPACING.md,
+  },
+  editButtonText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginLeft: SPACING.xs,
   },
   adminBadge: {
     flexDirection: 'row',
@@ -252,5 +428,57 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 12,
     padding: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: SPACING.lg,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  inputLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+    marginTop: SPACING.md,
+  },
+  textInput: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  bioInput: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    textAlign: 'right',
+    marginTop: SPACING.xs,
+  },
+  saveButton: {
+    marginTop: SPACING.lg,
   },
 });

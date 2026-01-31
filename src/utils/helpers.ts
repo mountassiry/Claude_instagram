@@ -83,3 +83,54 @@ export const isVideo = (uri: string): boolean => {
   const ext = getFileExtension(uri);
   return videoExtensions.includes(ext);
 };
+
+export const validateUsername = (username: string): { valid: boolean; message: string } => {
+  if (username.length < 3) {
+    return { valid: false, message: 'Username must be at least 3 characters' };
+  }
+  if (username.length > 20) {
+    return { valid: false, message: 'Username must be less than 20 characters' };
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    return { valid: false, message: 'Username can only contain letters, numbers, and underscores' };
+  }
+  if (/^[0-9]/.test(username)) {
+    return { valid: false, message: 'Username cannot start with a number' };
+  }
+  return { valid: true, message: '' };
+};
+
+export const formatUsername = (username: string): string => {
+  return username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+};
+
+export const extractMentions = (text: string): string[] => {
+  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+  const mentions: string[] = [];
+  let match;
+  while ((match = mentionRegex.exec(text)) !== null) {
+    mentions.push(match[1].toLowerCase());
+  }
+  return [...new Set(mentions)]; // Remove duplicates
+};
+
+export const highlightMentions = (text: string): { text: string; isMention: boolean }[] => {
+  const parts: { text: string; isMention: boolean }[] = [];
+  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = mentionRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index), isMention: false });
+    }
+    parts.push({ text: match[0], isMention: true });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), isMention: false });
+  }
+
+  return parts;
+};

@@ -15,7 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, SPACING, FONT_SIZES } from '../../config/constants';
 import { Input, Button } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
-import { validateEmail, validatePassword } from '../../utils/helpers';
+import { validateEmail, validatePassword, validateUsername, formatUsername } from '../../utils/helpers';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -23,28 +23,46 @@ type RegisterScreenProps = {
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
   const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [errors, setErrors] = useState<{
     displayName?: string;
+    username?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
     inviteCode?: string;
   }>({});
 
-  const { signUp } = useAuth();
+  const { signUp, checkUsernameAvailable } = useAuth();
 
-  const validate = (): boolean => {
+  const validate = async (): Promise<boolean> => {
     const newErrors: typeof errors = {};
 
     if (!displayName.trim()) {
       newErrors.displayName = 'Name is required';
     } else if (displayName.trim().length < 2) {
       newErrors.displayName = 'Name must be at least 2 characters';
+    }
+
+    const usernameValidation = validateUsername(username);
+    if (!username.trim()) {
+      newErrors.username = 'Username is required';
+    } else if (!usernameValidation.valid) {
+      newErrors.username = usernameValidation.message;
+    } else {
+      // Check if username is available
+      setCheckingUsername(true);
+      const isAvailable = await checkUsernameAvailable(username);
+      setCheckingUsername(false);
+      if (!isAvailable) {
+        newErrors.username = 'Username is already taken';
+      }
     }
 
     if (!email.trim()) {
@@ -73,14 +91,19 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   };
 
   const handleRegister = async () => {
-    if (!validate()) return;
-
     setLoading(true);
+    const isValid = await validate();
+    if (!isValid) {
+      setLoading(false);
+      return;
+    }
+
     try {
       await signUp(
         email.trim().toLowerCase(),
         password,
         displayName.trim(),
+        formatUsername(username),
         inviteCode.trim().toUpperCase()
       );
     } catch (error: any) {
@@ -131,6 +154,17 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
               autoCapitalize="words"
               icon="person-outline"
               error={errors.displayName}
+            />
+
+            <Input
+              label="Username"
+              placeholder="Choose a username"
+              value={username}
+              onChangeText={(text) => setUsername(formatUsername(text))}
+              autoCapitalize="none"
+              autoCorrect={false}
+              icon="at"
+              error={errors.username}
             />
 
             <Input

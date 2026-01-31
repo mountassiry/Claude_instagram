@@ -19,7 +19,7 @@ import { Avatar, LoadingScreen, EmptyState } from '../../components';
 import { useComments } from '../../hooks/usePosts';
 import { useAuth } from '../../contexts/AuthContext';
 import { Comment } from '../../types';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, highlightMentions } from '../../utils/helpers';
 
 type CommentsScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -77,10 +77,19 @@ export const CommentsScreen: React.FC<CommentsScreenProps> = ({
       <Avatar uri={item.userPhotoURL} name={item.userDisplayName} size={36} />
       <View style={styles.commentContent}>
         <View style={styles.commentHeader}>
-          <Text style={styles.commentUsername}>{item.userDisplayName}</Text>
+          <View>
+            <Text style={styles.commentDisplayName}>{item.userDisplayName}</Text>
+            <Text style={styles.commentUsername}>@{item.username}</Text>
+          </View>
           <Text style={styles.commentTime}>{formatDate(item.createdAt)}</Text>
         </View>
-        <Text style={styles.commentText}>{item.text}</Text>
+        <Text style={styles.commentText}>
+          {highlightMentions(item.text).map((part, index) => (
+            <Text key={index} style={part.isMention ? styles.mention : undefined}>
+              {part.text}
+            </Text>
+          ))}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -194,10 +203,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xs,
   },
-  commentUsername: {
+  commentDisplayName: {
     fontSize: FONT_SIZES.md,
     fontWeight: '600',
     color: COLORS.text,
+  },
+  commentUsername: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
   },
   commentTime: {
     fontSize: FONT_SIZES.xs,
@@ -207,6 +220,10 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
     lineHeight: 20,
+  },
+  mention: {
+    color: COLORS.primary,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',

@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
-import { Post, Comment } from '../types';
+import { Post, Comment, UserTag } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 const POSTS_PER_PAGE = 10;
@@ -113,7 +113,8 @@ export const usePosts = () => {
   const createPost = useCallback(async (
     mediaUri: string,
     mediaType: 'image' | 'video',
-    caption: string
+    caption: string,
+    tags: UserTag[] = []
   ) => {
     if (!user) throw new Error('Must be logged in to create a post');
 
@@ -129,6 +130,7 @@ export const usePosts = () => {
     // Create post document
     const postData = {
       userId: user.id,
+      username: user.username,
       userDisplayName: user.displayName,
       userPhotoURL: user.photoURL || null,
       mediaUrl,
@@ -136,6 +138,7 @@ export const usePosts = () => {
       caption,
       likes: [],
       commentsCount: 0,
+      tags,
       createdAt: new Date(),
     };
 
@@ -209,6 +212,7 @@ export const useComments = (postId: string) => {
     const commentData = {
       postId,
       userId: user.id,
+      username: user.username,
       userDisplayName: user.displayName,
       userPhotoURL: user.photoURL || null,
       text,

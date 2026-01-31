@@ -17,7 +17,8 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from '../config/firebase';
 import { User, InviteCode } from '../types';
 
 interface AuthContextType {
@@ -25,8 +26,11 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string, inviteCode: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string, username: string, inviteCode: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUserProfile: (updates: { displayName?: string; bio?: string; photoURL?: string }) => Promise<void>;
+  uploadProfilePicture: (imageUri: string) => Promise<string>;
+  checkUsernameAvailable: (username: string) => Promise<boolean>;
   isAdmin: boolean;
 }
 
@@ -61,8 +65,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser({
             id: firebaseUser.uid,
             email: userData.email,
+            username: userData.username,
             displayName: userData.displayName,
             photoURL: userData.photoURL,
+            bio: userData.bio,
             role: userData.role,
             createdAt: userData.createdAt?.toDate() || new Date(),
             invitedBy: userData.invitedBy,
@@ -111,16 +117,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const checkUsernameAvailable = async (username: string): Promise<boolean> => {
+    const usernameLC = username.toLowerCase();
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', usernameLC));
+    const snapshot = await getDocs(q);
+    return snapshot.empty;
+  };
+
   const signUp = async (
     email: string,
     password: string,
     displayName: string,
+    username: string,
     inviteCode: string
   ): Promise<void> => {
     // Validate invite code first
     const invite = await validateInviteCode(inviteCode);
     if (!invite) {
       throw new Error('Invalid or expired invite code');
+    }
+
+    // Check username availability
+    const usernameLC = username.toLowerCase();
+    const isAvailable = await checkUsernameAvailable(usernameLC);
+    if (!isAvailable) {
+      throw new Error('Username is already taken');
     }
 
     // Create Firebase auth user
@@ -137,6 +159,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Create user document in Firestore
     const userData: Omit<User, 'id'> = {
       email,
+      username: usernameLC,
       displayName,
       role: isFirstUser ? 'admin' : 'member',
       createdAt: new Date(),
@@ -154,6 +177,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
   };
 
+  const uploadProfilePicture = async (imageUri: string): Promise<string> => {
+    if (!user) throw new Error('Must be logged in');
+
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    const filename = `profiles/${user.id}/avatar_${Date.now()}.jpg`;
+    const storageRef = ref(storage, filename);
+
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+
+    // Update user document and auth profile
+    await updateDoc(doc(db, 'users', user.id), { photoURL: downloadURL });
+    if (firebaseUser) {
+      await updateProfile(firebaseUser, { photoURL: downloadURL });
+    }
+
+    // Update local state
+    setUser({ ...user, photoURL: downloadURL });
+
+    return downloadURL;
+  };
+
+  const updateUserProfile = async (updates: {
+    displayName?: string;
+    bio?: string;
+    photoURL?: string;
+  }): Promise<void> => {
+    if (!user) throw new Error('Must be logged in');
+
+    await updateDoc(doc(db, 'users', user.id), updates);
+
+    if (updates.displayName && firebaseUser) {
+      await updateProfile(firebaseUser, { displayName: updates.displayName });
+    }
+
+    setUser({ ...user, ...updates });
+  };
+
   const signOut = async (): Promise<void> => {
     await firebaseSignOut(auth);
     setUser(null);
@@ -166,6 +228,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signIn,
     signUp,
     signOut,
+    updateUserProfile,
+    uploadProfilePicture,
+    checkUsernameAvailable,
     isAdmin: user?.role === 'admin',
   };
 
