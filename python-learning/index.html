@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyLearn - Python Learning Environment</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div id="titlebar">
+        <div class="titlebar-left">
+            <i class="fa-brands fa-python titlebar-icon"></i>
+            <span class="titlebar-menu">File</span>
+            <span class="titlebar-menu">Edit</span>
+            <span class="titlebar-menu">View</span>
+            <span class="titlebar-menu">Run</span>
+            <span class="titlebar-menu">Help</span>
+        </div>
+        <div class="titlebar-center">
+            <span id="titlebar-filename">PyLearn - Python Learning Environment</span>
+        </div>
+        <div class="titlebar-right">
+            <span class="titlebar-btn minimize"><i class="fa-solid fa-minus"></i></span>
+            <span class="titlebar-btn maximize"><i class="fa-regular fa-square"></i></span>
+            <span class="titlebar-btn close"><i class="fa-solid fa-xmark"></i></span>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div id="main-container">
+        <!-- Activity Bar (leftmost icon strip) -->
+        <div id="activity-bar">
+            <div class="activity-icon active" data-panel="explorer" title="Explorer">
+                <i class="fa-solid fa-copy"></i>
+            </div>
+            <div class="activity-icon" data-panel="challenges" title="Challenges">
+                <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <div class="activity-icon" data-panel="search" title="Search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <div class="activity-icon" data-panel="extensions" title="Progress">
+                <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div class="activity-spacer"></div>
+            <div class="activity-icon" id="settings-icon" title="Settings">
+                <i class="fa-solid fa-gear"></i>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div id="sidebar">
+            <!-- Explorer Panel -->
+            <div class="sidebar-panel active" id="panel-explorer">
+                <div class="sidebar-header">EXPLORER</div>
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fa-solid fa-chevron-down"></i> PYLEARN WORKSPACE
+                    </div>
+                    <div id="file-tree" class="file-tree">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Challenges Panel -->
+            <div class="sidebar-panel" id="panel-challenges">
+                <div class="sidebar-header">CHALLENGES</div>
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fa-solid fa-chevron-down"></i> ALL CHALLENGES
+                    </div>
+                    <div id="challenge-list" class="challenge-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Panel -->
+            <div class="sidebar-panel" id="panel-search">
+                <div class="sidebar-header">SEARCH</div>
+                <div class="sidebar-section">
+                    <div class="search-box">
+                        <input type="text" placeholder="Search challenges..." id="search-input">
+                    </div>
+                    <div id="search-results" class="search-results"></div>
+                </div>
+            </div>
+
+            <!-- Progress Panel -->
+            <div class="sidebar-panel" id="panel-extensions">
+                <div class="sidebar-header">YOUR PROGRESS</div>
+                <div class="sidebar-section" id="progress-panel">
+                    <div class="progress-overview">
+                        <div class="progress-ring-container">
+                            <svg class="progress-ring" viewBox="0 0 120 120">
+                                <circle class="progress-ring-bg" cx="60" cy="60" r="52" />
+                                <circle class="progress-ring-fill" cx="60" cy="60" r="52" id="progress-circle" />
+                                <text x="60" y="55" class="progress-ring-text" id="progress-percent">0%</text>
+                                <text x="60" y="72" class="progress-ring-subtext">complete</text>
+                            </svg>
+                        </div>
+                        <div class="progress-stats">
+                            <div class="stat"><span id="stat-completed">0</span> Completed</div>
+                            <div class="stat"><span id="stat-remaining">0</span> Remaining</div>
+                            <div class="stat"><span id="stat-streak">0</span> Streak</div>
+                        </div>
+                    </div>
+                    <div class="progress-level" id="progress-level">
+                        <div class="level-badge">Beginner</div>
+                        <div class="level-bar">
+                            <div class="level-fill" id="level-fill"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Editor Area -->
+        <div id="editor-area">
+            <!-- Tabs -->
+            <div id="editor-tabs">
+                <div id="tab-list">
+                    <!-- Populated by JS -->
+                </div>
+                <div id="help-toggle" title="Toggle Help Panel">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <span>Help</span>
+                </div>
+            </div>
+
+            <!-- Content area (editor + help side by side) -->
+            <div id="content-area">
+                <!-- Welcome / Assignment Panel -->
+                <div id="assignment-panel" class="assignment-visible">
+                    <div class="assignment-content">
+                        <div class="welcome-header">
+                            <div class="welcome-logo">
+                                <i class="fa-brands fa-python"></i>
+                            </div>
+                            <h1>Welcome to PyLearn</h1>
+                            <p class="welcome-subtitle">Master Python through hands-on coding challenges</p>
+                        </div>
+                        <div class="assignment-body" id="assignment-body">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="assignment-actions" id="assignment-actions">
+                            <button class="btn btn-primary" id="btn-start-coding">
+                                <i class="fa-solid fa-code"></i> Start Coding
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Editor + Optional Help -->
+                <div id="editor-and-help" class="editor-hidden">
+                    <div id="editor-container">
+                        <div id="monaco-editor"></div>
+                    </div>
+
+                    <!-- Help Panel (right side) -->
+                    <div id="help-panel" class="help-hidden">
+                        <div class="help-header">
+                            <span><i class="fa-solid fa-lightbulb"></i> Help & Hints</span>
+                            <button id="help-close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="help-content" id="help-content">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resize handle for terminal -->
+            <div id="terminal-resize-handle"></div>
+
+            <!-- Terminal Panel -->
+            <div id="terminal-panel">
+                <div class="terminal-tabs">
+                    <div class="terminal-tab-list">
+                        <div class="terminal-tab active">
+                            <i class="fa-solid fa-terminal"></i> TERMINAL
+                        </div>
+                        <div class="terminal-tab" id="problems-tab">
+                            <i class="fa-solid fa-circle-exclamation"></i> PROBLEMS
+                            <span class="badge" id="problems-badge">0</span>
+                        </div>
+                        <div class="terminal-tab" id="output-tab">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i> OUTPUT
+                        </div>
+                    </div>
+                    <div class="terminal-actions">
+                        <button id="btn-run" class="terminal-action-btn run-btn" title="Run Python (Ctrl+Enter)">
+                            <i class="fa-solid fa-play"></i> Run
+                        </button>
+                        <button id="btn-clear" class="terminal-action-btn" title="Clear Terminal">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                        <button id="btn-submit" class="terminal-action-btn submit-btn" title="Submit Solution">
+                            <i class="fa-solid fa-check"></i> Submit
+                        </button>
+                    </div>
+                </div>
+                <div id="terminal-output" class="terminal-body">
+                    <div class="terminal-line system">
+                        <span class="prompt-symbol">$</span> Python 3.11 (Pyodide) - Ready
+                    </div>
+                    <div class="terminal-line system">
+                        <span class="prompt-symbol">$</span> Type your code in the editor and click Run or press Ctrl+Enter
+                    </div>
+                </div>
+                <div id="terminal-input-line" class="terminal-input-line hidden">
+                    <span class="prompt-symbol">&gt;&gt;&gt;</span>
+                    <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="statusbar">
+        <div class="statusbar-left">
+            <span class="status-item" id="status-branch">
+                <i class="fa-solid fa-code-branch"></i> main
+            </span>
+            <span class="status-item" id="status-errors">
+                <i class="fa-solid fa-circle-xmark"></i> <span id="error-count">0</span>
+                <i class="fa-solid fa-triangle-exclamation"></i> <span id="warning-count">0</span>
+            </span>
+        </div>
+        <div class="statusbar-right">
+            <span class="status-item" id="status-challenge">
+                <i class="fa-solid fa-graduation-cap"></i> Challenge 1/10
+            </span>
+            <span class="status-item">
+                <i class="fa-brands fa-python"></i> Python 3.11
+            </span>
+            <span class="status-item">Ln 1, Col 1</span>
+            <span class="status-item">UTF-8</span>
+            <span class="status-item">Spaces: 4</span>
+        </div>
+    </div>
+
+    <!-- Loading overlay for Pyodide -->
+    <div id="loading-overlay">
+        <div class="loader-content">
+            <div class="loader-spinner"></div>
+            <h2>Loading Python Environment...</h2>
+            <p id="loading-status">Initializing Pyodide runtime...</p>
+            <div class="loader-bar">
+                <div class="loader-fill" id="loader-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/challenges.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
