@@ -8,14 +8,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, FONT_SIZES } from '../../config/constants';
-import { useAuth } from '../../contexts/AuthContext';
-
-type SettingsScreenProps = {
-  navigation: NativeStackNavigationProp<any>;
-};
+import { COLORS, SPACING, FONT_SIZES, SIGNALING_SERVER_URL } from '../../config/constants';
+import { useIdentity } from '../../contexts/IdentityContext';
+import { useMessaging } from '../../contexts/MessagingContext';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -26,55 +22,35 @@ interface SettingItemProps {
   danger?: boolean;
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
-  icon,
-  title,
-  subtitle,
-  onPress,
-  showArrow = true,
-  danger = false,
-}) => (
+const SettingItem: React.FC<SettingItemProps> = ({ icon, title, subtitle, onPress, showArrow = true, danger = false }) => (
   <TouchableOpacity style={styles.settingItem} onPress={onPress}>
     <View style={[styles.iconContainer, danger && styles.iconContainerDanger]}>
-      <Ionicons
-        name={icon}
-        size={22}
-        color={danger ? COLORS.error : COLORS.primary}
-      />
+      <Ionicons name={icon} size={22} color={danger ? COLORS.error : COLORS.primary} />
     </View>
     <View style={styles.settingContent}>
-      <Text style={[styles.settingTitle, danger && styles.settingTitleDanger]}>
-        {title}
-      </Text>
+      <Text style={[styles.settingTitle, danger && styles.settingTitleDanger]}>{title}</Text>
       {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
     </View>
-    {showArrow && (
-      <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
-    )}
+    {showArrow && <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />}
   </TouchableOpacity>
 );
 
-export const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
-  const { user, isAdmin, signOut } = useAuth();
+interface Props {
+  navigation: { goBack: () => void };
+}
 
-  const handleSignOut = () => {
+export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+  const { profile, identity, resetIdentity } = useIdentity();
+  const { isConnected } = useMessaging();
+
+  const confirmReset = () => {
     Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
+      'Reset Identity',
+      'This will permanently delete your cryptographic keys, contacts, messages, and all local data. This CANNOT be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
-            }
-          },
-        },
-      ]
+        { text: 'Reset Everything', style: 'destructive', onPress: resetIdentity },
+      ],
     );
   };
 
@@ -90,52 +66,52 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) =>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>Identity</Text>
           <View style={styles.sectionContent}>
             <SettingItem
               icon="person-outline"
-              title={user?.displayName || 'User'}
-              subtitle={user?.email}
+              title={profile?.displayName ?? 'Unknown'}
+              subtitle={`Peer ID: ${identity?.peerId?.slice(0, 16)}…`}
               onPress={() => {}}
               showArrow={false}
             />
           </View>
         </View>
 
-        {isAdmin && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Admin</Text>
-            <View style={styles.sectionContent}>
-              <SettingItem
-                icon="people-outline"
-                title="Manage Members"
-                subtitle="View and manage family members"
-                onPress={() => navigation.navigate('ManageUsers')}
-              />
-              <SettingItem
-                icon="ticket-outline"
-                title="Invite Codes"
-                subtitle="Create and manage invite codes"
-                onPress={() => navigation.navigate('InviteCodes')}
-              />
-            </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Network</Text>
+          <View style={styles.sectionContent}>
+            <SettingItem
+              icon={isConnected ? 'wifi' : 'wifi-outline'}
+              title={isConnected ? 'Connected to relay' : 'Offline'}
+              subtitle={SIGNALING_SERVER_URL}
+              onPress={() => {}}
+              showArrow={false}
+            />
           </View>
-        )}
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.sectionContent}>
             <SettingItem
-              icon="information-circle-outline"
-              title="App Version"
-              subtitle="1.0.0"
+              icon="lock-closed-outline"
+              title="End-to-End Encrypted"
+              subtitle="All messages & posts encrypted with NaCl (XSalsa20-Poly1305)"
+              onPress={() => {}}
+              showArrow={false}
+            />
+            <SettingItem
+              icon="server-outline"
+              title="Zero Cloud Storage"
+              subtitle="All data stored locally on this device"
               onPress={() => {}}
               showArrow={false}
             />
             <SettingItem
               icon="shield-checkmark-outline"
-              title="Privacy"
-              subtitle="Your data stays within the family"
+              title="App Version"
+              subtitle="Nexus P2P v1.0.0"
               onPress={() => {}}
               showArrow={false}
             />
@@ -145,9 +121,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) =>
         <View style={styles.section}>
           <View style={styles.sectionContent}>
             <SettingItem
-              icon="log-out-outline"
-              title="Sign Out"
-              onPress={handleSignOut}
+              icon="trash-outline"
+              title="Reset Identity & Wipe All Data"
+              subtitle="Permanently deletes your keys and all local data"
+              onPress={confirmReset}
               showArrow={false}
               danger
             />
@@ -159,79 +136,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) =>
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  content: {
-    paddingVertical: SPACING.md,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
-  sectionContent: {
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: COLORS.border,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.divider,
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: `${COLORS.primary}15`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  iconContainerDanger: {
-    backgroundColor: `${COLORS.error}15`,
-  },
-  settingContent: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  settingTitleDanger: {
-    color: COLORS.error,
-  },
-  settingSubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: '600', color: COLORS.text },
+  content: { paddingVertical: SPACING.md },
+  section: { marginBottom: SPACING.lg },
+  sectionTitle: { fontSize: FONT_SIZES.sm, fontWeight: '600', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: SPACING.md, marginBottom: SPACING.sm },
+  sectionContent: { backgroundColor: COLORS.surface, borderTopWidth: 1, borderBottomWidth: 1, borderColor: COLORS.border },
+  settingItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  iconContainer: { width: 36, height: 36, borderRadius: 8, backgroundColor: `${COLORS.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  iconContainerDanger: { backgroundColor: `${COLORS.error}15` },
+  settingContent: { flex: 1 },
+  settingTitle: { fontSize: FONT_SIZES.md, fontWeight: '500', color: COLORS.text },
+  settingTitleDanger: { color: COLORS.error },
+  settingSubtitle: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, marginTop: 2 },
 });

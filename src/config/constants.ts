@@ -69,22 +69,11 @@ export const BORDER_RADIUS = {
   round: 999,
 };
 
-export const STORY_DURATION_MS = 5000;
-export const MAX_TWEET_LENGTH = 280;
 export const MAX_CAPTION_LENGTH = 2200;
 export const MAX_GROUP_MEMBERS = 256;
-export const STORY_EXPIRY_HOURS = 24;
 
-export const FIREBASE_COLLECTIONS = {
-  USERS: 'users',
-  POSTS: 'posts',
-  COMMENTS: 'comments',
-  STORIES: 'stories',
-  CONVERSATIONS: 'conversations',
-  MESSAGES: 'messages',
-  NOTIFICATIONS: 'notifications',
-  HASHTAGS: 'hashtags',
-  FOLLOWS: 'follows',
-  LIKES: 'likes',
-  BOOKMARKS: 'bookmarks',
-} as const;
+// ─── P2P Signaling Server ────────────────────────────────────────────────────
+// Change this to your deployed signaling server URL in production.
+// The server only routes encrypted messages — it never stores plaintext.
+export const SIGNALING_SERVER_URL =
+  process.env.EXPO_PUBLIC_SIGNALING_URL ?? 'ws://localhost:8080';
