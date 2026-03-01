@@ -1,14 +1,3 @@
-import { INVITE_CODE_LENGTH } from '../config/constants';
-
-export const generateInviteCode = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
 export const formatDate = (date: Date): string => {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -17,69 +6,58 @@ export const formatDate = (date: Date): string => {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
-  if (seconds < 60) {
-    return 'just now';
-  } else if (minutes < 60) {
-    return `${minutes}m ago`;
-  } else if (hours < 24) {
-    return `${hours}h ago`;
-  } else if (days < 7) {
-    return `${days}d ago`;
-  } else {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
-  }
+  if (seconds < 60) return 'just now';
+  if (minutes < 60) return `${minutes}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
 };
 
 export const formatNumber = (num: number): string => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
   return num.toString();
 };
 
-export const getInitials = (name: string): string => {
-  return name
-    .split(' ')
-    .map(part => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+export const extractHashtags = (text: string): string[] => {
+  const matches = text.match(/#[a-zA-Z0-9_]+/g) || [];
+  return matches.map((tag) => tag.slice(1).toLowerCase());
 };
 
-export const validateEmail = (email: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
+export const validateEmail = (email: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export const validatePassword = (password: string): { valid: boolean; message: string } => {
-  if (password.length < 8) {
-    return { valid: false, message: 'Password must be at least 8 characters' };
-  }
-  if (!/[A-Z]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one uppercase letter' };
-  }
-  if (!/[a-z]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one lowercase letter' };
-  }
-  if (!/[0-9]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one number' };
-  }
+  if (password.length < 8) return { valid: false, message: 'Password must be at least 8 characters' };
+  if (!/[A-Z]/.test(password)) return { valid: false, message: 'Password must contain an uppercase letter' };
+  if (!/[0-9]/.test(password)) return { valid: false, message: 'Password must contain a number' };
   return { valid: true, message: '' };
 };
 
-export const getFileExtension = (uri: string): string => {
-  const match = uri.match(/\.([^.]+)$/);
-  return match ? match[1].toLowerCase() : '';
+export const validateUsername = (username: string): { valid: boolean; message: string } => {
+  if (username.length < 3) return { valid: false, message: 'Username must be at least 3 characters' };
+  if (username.length > 30) return { valid: false, message: 'Username must be 30 characters or less' };
+  if (!/^[a-zA-Z0-9._]+$/.test(username)) return { valid: false, message: 'Username can only contain letters, numbers, dots and underscores' };
+  return { valid: true, message: '' };
 };
 
-export const isVideo = (uri: string): boolean => {
-  const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
-  const ext = getFileExtension(uri);
-  return videoExtensions.includes(ext);
+export const getInitials = (name: string): string =>
+  name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+
+export const isVideoUri = (uri: string): boolean =>
+  /\.(mp4|mov|avi|mkv|webm)$/i.test(uri);
+
+export const formatMessageTime = (date: Date): string => {
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  if (diff < 60_000) return 'now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+  if (diff < 86_400_000) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };

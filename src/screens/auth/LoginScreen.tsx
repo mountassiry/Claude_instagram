@@ -12,56 +12,44 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { COLORS, SPACING, FONT_SIZES } from '../../config/constants';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../config/constants';
 import { Input, Button } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
 import { validateEmail } from '../../utils/helpers';
 
-type LoginScreenProps = {
-  navigation: NativeStackNavigationProp<any>;
-};
+type Props = { navigation: NativeStackNavigationProp<any> };
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-
   const { signIn } = useAuth();
 
-  const validate = (): boolean => {
-    const newErrors: { email?: string; password?: string } = {};
-
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!validateEmail(email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
-
-    if (!password) {
-      newErrors.password = 'Password is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const validate = () => {
+    const e: typeof errors = {};
+    if (!email.trim()) e.email = 'Email is required';
+    else if (!validateEmail(email)) e.email = 'Enter a valid email';
+    if (!password) e.password = 'Password is required';
+    setErrors(e);
+    return !Object.keys(e).length;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
-    } catch (error: any) {
-      let message = 'Failed to sign in. Please try again.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        message = 'Invalid email or password';
-      } else if (error.code === 'auth/too-many-requests') {
-        message = 'Too many failed attempts. Please try again later.';
-      } else if (error.message) {
-        message = error.message;
+    } catch (err: any) {
+      let msg = 'Failed to sign in. Please try again.';
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        msg = 'Invalid email or password';
+      } else if (err.code === 'auth/too-many-requests') {
+        msg = 'Too many attempts. Please try again later.';
+      } else if (err.message) {
+        msg = err.message;
       }
-      Alert.alert('Login Failed', message);
+      Alert.alert('Login Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -69,33 +57,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Ionicons name="people-circle" size={80} color={COLORS.primary} />
-            <Text style={styles.title}>Family Circle</Text>
-            <Text style={styles.subtitle}>Share moments with your loved ones</Text>
+            <View style={styles.logoWrap}>
+              <Ionicons name="flash" size={40} color={COLORS.white} />
+            </View>
+            <Text style={styles.title}>Nexus</Text>
+            <Text style={styles.subtitle}>Connect · Share · Message</Text>
           </View>
 
-          <View style={styles.form}>
+          <View style={styles.card}>
             <Input
               label="Email"
-              placeholder="Enter your email"
+              placeholder="your@email.com"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              autoComplete="email"
               icon="mail-outline"
               error={errors.email}
             />
-
             <Input
               label="Password"
               placeholder="Enter your password"
@@ -105,19 +87,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               icon="lock-closed-outline"
               error={errors.password}
             />
-
-            <Button
-              title="Sign In"
-              onPress={handleLogin}
-              loading={loading}
-              style={styles.button}
-            />
+            <Button title="Sign In" onPress={handleLogin} loading={loading} style={styles.btn} />
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account?</Text>
+            <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.linkText}>Sign up with invite code</Text>
+              <Text style={styles.link}>Create account</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -127,60 +103,37 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: SPACING.lg,
-  },
-  header: {
+  container: { flex: 1, backgroundColor: COLORS.background },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: SPACING.lg },
+  header: { alignItems: 'center', marginBottom: SPACING.xl },
+  logoWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
-    marginBottom: SPACING.xl,
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  title: {
-    fontSize: FONT_SIZES.xxxl,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginTop: SPACING.md,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  form: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
+  title: { fontSize: FONT_SIZES.xxxl, fontWeight: '800', color: COLORS.primary },
+  subtitle: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary, marginTop: 4 },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 3,
   },
-  button: {
-    marginTop: SPACING.md,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: SPACING.lg,
-  },
-  footerText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
-  linkText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginLeft: SPACING.xs,
-  },
+  btn: { marginTop: SPACING.sm },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg },
+  footerText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  link: { fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: '700' },
 });

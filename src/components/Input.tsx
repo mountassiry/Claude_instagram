@@ -34,35 +34,32 @@ export const Input: React.FC<InputProps> = ({
       <View
         style={[
           styles.inputContainer,
-          isFocused && styles.inputContainerFocused,
-          error && styles.inputContainerError,
+          isFocused && styles.inputFocused,
+          !!error && styles.inputError,
         ]}
       >
         {icon && (
           <Ionicons
             name={icon}
-            size={20}
-            color={isFocused ? COLORS.primary : COLORS.textSecondary}
+            size={18}
+            color={isFocused ? COLORS.primary : COLORS.midGray}
             style={styles.icon}
           />
         )}
         <TextInput
           style={[styles.input, style]}
-          placeholderTextColor={COLORS.textLight}
+          placeholderTextColor={COLORS.lightGray}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           secureTextEntry={isPassword && !showPassword}
           {...props}
         />
         {isPassword && (
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeIcon}
-          >
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
             <Ionicons
               name={showPassword ? 'eye-off' : 'eye'}
-              size={20}
-              color={COLORS.textSecondary}
+              size={18}
+              color={COLORS.midGray}
             />
           </TouchableOpacity>
         )}
@@ -73,9 +70,7 @@ export const Input: React.FC<InputProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: SPACING.md,
-  },
+  container: { marginBottom: SPACING.md },
   label: {
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
@@ -86,31 +81,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.md,
     paddingHorizontal: SPACING.md,
   },
-  inputContainerFocused: {
-    borderColor: COLORS.primary,
-  },
-  inputContainerError: {
-    borderColor: COLORS.error,
-  },
-  icon: {
-    marginRight: SPACING.sm,
-  },
+  inputFocused: { borderColor: COLORS.primary },
+  inputError: { borderColor: COLORS.error },
+  icon: { marginRight: SPACING.sm },
   input: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
-  eyeIcon: {
-    padding: SPACING.xs,
-  },
+  eyeIcon: { padding: SPACING.xs },
   error: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.error,
     marginTop: SPACING.xs,
   },

@@ -1,7 +1,7 @@
 {
-  "name": "family-circle",
+  "name": "nexus-social",
   "version": "1.0.0",
-  "description": "A secure, invite-only family photo and video sharing app",
+  "description": "Nexus - A unified social platform combining Instagram, Twitter, and WhatsApp",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",

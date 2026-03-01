@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   collection,
   query,
@@ -7,239 +7,191 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  arrayUnion,
-  arrayRemove,
-  addDoc,
+  increment,
+  setDoc,
   deleteDoc,
-  getDocs,
+  addDoc,
+  serverTimestamp,
   where,
-  startAfter,
-  DocumentSnapshot,
+  getDocs,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
-import { Post, Comment } from '../types';
+import { db } from '../config/firebase';
+import { Post, PostType } from '../types';
+import { FIREBASE_COLLECTIONS } from '../config/constants';
 import { useAuth } from '../contexts/AuthContext';
 
-const POSTS_PER_PAGE = 10;
-
-export const usePosts = () => {
+export const useFeedPosts = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const { user } = useAuth();
 
   useEffect(() => {
-    const postsRef = collection(db, 'posts');
-    const q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const postsData: Post[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as Post[];
-
-      setPosts(postsData);
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-      setHasMore(snapshot.docs.length === POSTS_PER_PAGE);
+    const q = query(
+      collection(db, FIREBASE_COLLECTIONS.POSTS),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => {
+        const raw = d.data();
+        return {
+          id: d.id,
+          authorId: raw.authorId,
+          type: raw.type as PostType,
+          caption: raw.caption || '',
+          hashtags: raw.hashtags || [],
+          mediaUrls: raw.mediaUrls || [],
+          thumbnailUrl: raw.thumbnailUrl,
+          likesCount: raw.likesCount || 0,
+          commentsCount: raw.commentsCount || 0,
+          repostsCount: raw.repostsCount || 0,
+          bookmarksCount: raw.bookmarksCount || 0,
+          location: raw.location,
+          createdAt: raw.createdAt?.toDate() || new Date(),
+          updatedAt: raw.updatedAt?.toDate() || new Date(),
+        } as Post;
+      });
+      setPosts(data);
       setLoading(false);
     });
-
-    return unsubscribe;
+    return unsub;
   }, []);
 
-  const loadMore = useCallback(async () => {
-    if (!hasMore || !lastDoc) return;
+  return { posts, loading };
+};
 
-    const postsRef = collection(db, 'posts');
+export const useUserPosts = (userId: string) => {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
     const q = query(
-      postsRef,
-      orderBy('createdAt', 'desc'),
-      startAfter(lastDoc),
-      limit(POSTS_PER_PAGE)
+      collection(db, FIREBASE_COLLECTIONS.POSTS),
+      where('authorId', '==', userId),
+      orderBy('createdAt', 'desc')
     );
-
-    const snapshot = await getDocs(q);
-    const newPosts: Post[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-    })) as Post[];
-
-    setPosts((prev) => [...prev, ...newPosts]);
-    setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-    setHasMore(snapshot.docs.length === POSTS_PER_PAGE);
-  }, [hasMore, lastDoc]);
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    const postsRef = collection(db, 'posts');
-    const q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
-
-    const snapshot = await getDocs(q);
-    const postsData: Post[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-    })) as Post[];
-
-    setPosts(postsData);
-    setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-    setHasMore(snapshot.docs.length === POSTS_PER_PAGE);
-    setRefreshing(false);
-  }, []);
-
-  const likePost = useCallback(async (postId: string) => {
-    if (!user) return;
-
-    const postRef = doc(db, 'posts', postId);
-    await updateDoc(postRef, {
-      likes: arrayUnion(user.id),
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => {
+        const raw = d.data();
+        return {
+          id: d.id,
+          authorId: raw.authorId,
+          type: raw.type as PostType,
+          caption: raw.caption || '',
+          hashtags: raw.hashtags || [],
+          mediaUrls: raw.mediaUrls || [],
+          thumbnailUrl: raw.thumbnailUrl,
+          likesCount: raw.likesCount || 0,
+          commentsCount: raw.commentsCount || 0,
+          repostsCount: raw.repostsCount || 0,
+          bookmarksCount: raw.bookmarksCount || 0,
+          createdAt: raw.createdAt?.toDate() || new Date(),
+          updatedAt: raw.updatedAt?.toDate() || new Date(),
+        } as Post;
+      });
+      setPosts(data);
+      setLoading(false);
     });
-  }, [user]);
+    return unsub;
+  }, [userId]);
 
-  const unlikePost = useCallback(async (postId: string) => {
+  return { posts, loading };
+};
+
+export const usePostActions = () => {
+  const { user } = useAuth();
+
+  const likePost = async (postId: string) => {
     if (!user) return;
-
-    const postRef = doc(db, 'posts', postId);
-    await updateDoc(postRef, {
-      likes: arrayRemove(user.id),
-    });
-  }, [user]);
-
-  const createPost = useCallback(async (
-    mediaUri: string,
-    mediaType: 'image' | 'video',
-    caption: string
-  ) => {
-    if (!user) throw new Error('Must be logged in to create a post');
-
-    // Upload media to Firebase Storage
-    const response = await fetch(mediaUri);
-    const blob = await response.blob();
-    const filename = `posts/${user.id}/${Date.now()}.${mediaType === 'image' ? 'jpg' : 'mp4'}`;
-    const storageRef = ref(storage, filename);
-
-    await uploadBytes(storageRef, blob);
-    const mediaUrl = await getDownloadURL(storageRef);
-
-    // Create post document
-    const postData = {
-      userId: user.id,
-      userDisplayName: user.displayName,
-      userPhotoURL: user.photoURL || null,
-      mediaUrl,
-      mediaType,
-      caption,
-      likes: [],
-      commentsCount: 0,
-      createdAt: new Date(),
-    };
-
-    await addDoc(collection(db, 'posts'), postData);
-  }, [user]);
-
-  const deletePost = useCallback(async (postId: string, mediaUrl: string) => {
-    // Delete media from storage
-    try {
-      const storageRef = ref(storage, mediaUrl);
-      await deleteObject(storageRef);
-    } catch (error) {
-      console.log('Error deleting media from storage:', error);
+    const likeRef = doc(db, FIREBASE_COLLECTIONS.LIKES, `${postId}_${user.id}`);
+    const likeSnap = await getDocs(
+      query(collection(db, FIREBASE_COLLECTIONS.LIKES), where('postId', '==', postId), where('userId', '==', user.id))
+    );
+    if (likeSnap.empty) {
+      await setDoc(likeRef, { postId, userId: user.id, createdAt: serverTimestamp() });
+      await updateDoc(doc(db, FIREBASE_COLLECTIONS.POSTS, postId), { likesCount: increment(1) });
+    } else {
+      await deleteDoc(likeRef);
+      await updateDoc(doc(db, FIREBASE_COLLECTIONS.POSTS, postId), { likesCount: increment(-1) });
     }
-
-    // Delete all comments
-    const commentsRef = collection(db, 'comments');
-    const q = query(commentsRef, where('postId', '==', postId));
-    const snapshot = await getDocs(q);
-    const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
-
-    // Delete post
-    await deleteDoc(doc(db, 'posts', postId));
-  }, []);
-
-  return {
-    posts,
-    loading,
-    refreshing,
-    hasMore,
-    loadMore,
-    refresh,
-    likePost,
-    unlikePost,
-    createPost,
-    deletePost,
   };
+
+  const createPost = async (data: {
+    type: PostType;
+    caption: string;
+    mediaUrls: string[];
+    hashtags: string[];
+    location?: string;
+  }) => {
+    if (!user) return;
+    await addDoc(collection(db, FIREBASE_COLLECTIONS.POSTS), {
+      authorId: user.id,
+      ...data,
+      likesCount: 0,
+      commentsCount: 0,
+      repostsCount: 0,
+      bookmarksCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  };
+
+  const deletePost = async (postId: string) => {
+    await deleteDoc(doc(db, FIREBASE_COLLECTIONS.POSTS, postId));
+  };
+
+  const repostPost = async (postId: string) => {
+    if (!user) return;
+    await addDoc(collection(db, FIREBASE_COLLECTIONS.POSTS), {
+      authorId: user.id,
+      type: 'tweet' as PostType,
+      caption: '',
+      hashtags: [],
+      mediaUrls: [],
+      originalPostId: postId,
+      repostedBy: user.id,
+      likesCount: 0,
+      commentsCount: 0,
+      repostsCount: 0,
+      bookmarksCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, FIREBASE_COLLECTIONS.POSTS, postId), { repostsCount: increment(1) });
+  };
+
+  return { likePost, createPost, deletePost, repostPost };
 };
 
 export const useComments = (postId: string) => {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<import('../types').Comment[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
 
   useEffect(() => {
-    const commentsRef = collection(db, 'comments');
+    if (!postId) return;
     const q = query(
-      commentsRef,
+      collection(db, FIREBASE_COLLECTIONS.COMMENTS),
       where('postId', '==', postId),
       orderBy('createdAt', 'asc')
     );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentsData: Comment[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as Comment[];
-
-      setComments(commentsData);
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => {
+        const raw = d.data();
+        return {
+          id: d.id,
+          postId: raw.postId,
+          authorId: raw.authorId,
+          text: raw.text || '',
+          likesCount: raw.likesCount || 0,
+          replyToId: raw.replyToId,
+          createdAt: raw.createdAt?.toDate() || new Date(),
+        } as import('../types').Comment;
+      });
+      setComments(data);
       setLoading(false);
     });
-
-    return unsubscribe;
+    return unsub;
   }, [postId]);
 
-  const addComment = useCallback(async (text: string) => {
-    if (!user) throw new Error('Must be logged in to comment');
-
-    const commentData = {
-      postId,
-      userId: user.id,
-      userDisplayName: user.displayName,
-      userPhotoURL: user.photoURL || null,
-      text,
-      createdAt: new Date(),
-    };
-
-    await addDoc(collection(db, 'comments'), commentData);
-
-    // Update comments count on post
-    const postRef = doc(db, 'posts', postId);
-    const commentsRef = collection(db, 'comments');
-    const q = query(commentsRef, where('postId', '==', postId));
-    const snapshot = await getDocs(q);
-    await updateDoc(postRef, { commentsCount: snapshot.size });
-  }, [postId, user]);
-
-  const deleteComment = useCallback(async (commentId: string) => {
-    await deleteDoc(doc(db, 'comments', commentId));
-
-    // Update comments count on post
-    const postRef = doc(db, 'posts', postId);
-    const commentsRef = collection(db, 'comments');
-    const q = query(commentsRef, where('postId', '==', postId));
-    const snapshot = await getDocs(q);
-    await updateDoc(postRef, { commentsCount: snapshot.size - 1 });
-  }, [postId]);
-
-  return {
-    comments,
-    loading,
-    addComment,
-    deleteComment,
-  };
+  return { comments, loading };
 };

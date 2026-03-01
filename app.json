@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Family Circle",
-    "slug": "family-circle",
+    "name": "Nexus",
+    "slug": "nexus-social",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,26 +9,24 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4A90A4"
+      "backgroundColor": "#6C63FF"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.familycircle.app",
+      "bundleIdentifier": "com.nexus.social",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow Family Circle to access your photos to share with family",
-        "NSCameraUsageDescription": "Allow Family Circle to use your camera to take photos and videos",
-        "NSMicrophoneUsageDescription": "Allow Family Circle to record audio for videos"
+        "NSPhotoLibraryUsageDescription": "Allow Nexus to access your photos to share with others",
+        "NSCameraUsageDescription": "Allow Nexus to use your camera to take photos and videos",
+        "NSMicrophoneUsageDescription": "Allow Nexus to record voice messages"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4A90A4"
+        "backgroundColor": "#6C63FF"
       },
-      "package": "com.familycircle.app",
+      "package": "com.nexus.social",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -43,15 +41,21 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Family Circle to access your photos to share with family",
-          "cameraPermission": "Allow Family Circle to use your camera"
+          "photosPermission": "Nexus needs access to your photos to share them.",
+          "cameraPermission": "Nexus needs camera access to take photos and videos."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Family Circle to access your photos",
-          "savePhotosPermission": "Allow Family Circle to save photos"
+          "photosPermission": "Allow Nexus to access your photos",
+          "savePhotosPermission": "Allow Nexus to save photos"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Nexus needs microphone access for voice messages."
         }
       ]
     ]
