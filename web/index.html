@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Precision, Recall & F1 — ML Metrics Explained</title>
+  <style>
+    :root {
+      --bg: #09090f;
+      --surface: #111120;
+      --card: #14142a;
+      --border: #232345;
+      --text: #e2e2f0;
+      --muted: #6868a0;
+
+      --cyan: #00d4ff;
+      --tp: #00e676;
+      --tn: #448aff;
+      --fp: #ff5252;
+      --fn: #ff9800;
+      --purple: #7c4dff;
+      --yellow: #ffd740;
+      --green: #69f0ae;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(9,9,15,0.88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 54px;
+    }
+    .nav-brand { font-weight: 800; font-size: 0.95rem; color: var(--cyan); letter-spacing: -0.02em; }
+    .nav-links { display: flex; gap: 1.75rem; list-style: none; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.8rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 2rem; }
+    section { padding: 5rem 2rem; max-width: 1060px; margin: 0 auto; }
+    hr.sep { border: none; border-top: 1px solid var(--border); }
+
+    .eyebrow {
+      font-size: 0.7rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .18em; color: var(--cyan); margin-bottom: .6rem;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 900; line-height: 1.08; letter-spacing: -.03em;
+      margin-bottom: 1.25rem;
+    }
+    h2 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 800; letter-spacing: -.025em; margin-bottom: .75rem;
+    }
+    h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: .35rem; }
+    p { color: #b8b8d8; margin-bottom: .85rem; max-width: 66ch; }
+    p:last-child { margin-bottom: 0; }
+
+    strong { color: var(--text); }
+    em { font-style: italic; color: var(--text); }
+
+    /* ── BADGES ── */
+    .badge-row { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 2.5rem; }
+    .badge {
+      padding: .3rem .8rem; border-radius: 100px; font-size: .75rem;
+      font-weight: 700; border: 1px solid;
+    }
+    .b-cyan  { background: rgba(0,212,255,.1);   border-color: var(--cyan);   color: var(--cyan); }
+    .b-purple{ background: rgba(124,77,255,.1);  border-color: var(--purple); color: var(--purple); }
+    .b-yellow{ background: rgba(255,215,64,.1);  border-color: var(--yellow); color: var(--yellow); }
+    .b-green { background: rgba(105,240,174,.1); border-color: var(--green);  color: var(--green); }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem;
+    }
+
+    /* ── OUTCOMES ── */
+    .outcomes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }
+    .oc {
+      border-radius: 14px; padding: 1.4rem 1.25rem; border: 1px solid;
+      transition: transform .2s;
+    }
+    .oc:hover { transform: translateY(-2px); }
+    .oc-tp { background: rgba(0,230,118,.06);  border-color: rgba(0,230,118,.25); }
+    .oc-tn { background: rgba(68,138,255,.06); border-color: rgba(68,138,255,.25); }
+    .oc-fp { background: rgba(255,82,82,.06);  border-color: rgba(255,82,82,.25); }
+    .oc-fn { background: rgba(255,152,0,.06);  border-color: rgba(255,152,0,.25); }
+    .oc-icon { font-size: 1.8rem; margin-bottom: .4rem; }
+    .oc-tag  {
+      font-size: .65rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .12em; margin-bottom: .2rem;
+    }
+    .oc-tp .oc-tag { color: var(--tp); }
+    .oc-tn .oc-tag { color: var(--tn); }
+    .oc-fp .oc-tag { color: var(--fp); }
+    .oc-fn .oc-tag { color: var(--fn); }
+    .oc-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .3rem; }
+    .oc p { font-size: .82rem; color: var(--muted); margin-bottom: .5rem; }
+    .oc-example {
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .78rem; padding: .3rem .6rem;
+      border-radius: 6px; background: rgba(255,255,255,.04);
+    }
+
+    /* ── TABS ── */
+    .tab-row { display: flex; gap: .5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .tab {
+      padding: .35rem .9rem; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer;
+      font-size: .82rem; font-weight: 600; transition: all .18s;
+    }
+    .tab.on { background: var(--surface); color: var(--text); border-color: var(--cyan); }
+
+    /* ── INTERACTIVE LAYOUT ── */
+    .lab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+
+    /* confusion matrix */
+    .axis-label {
+      font-size: .65rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .12em; color: var(--muted); text-align: center;
+    }
+    .cm-wrap {
+      display: grid; grid-template-columns: auto 1fr; gap: .5rem; align-items: center;
+    }
+    .cm-vert {
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      text-align: center; white-space: nowrap;
+    }
+    .cm-header { display: grid; grid-template-columns: 1fr 1fr; }
+    .cm-hcell {
+      padding: .3rem .5rem; text-align: center; font-size: .62rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); border: 1px solid var(--border);
+      background: rgba(255,255,255,.025);
+    }
+    .cm-grid {
+      display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+      border-radius: 0 0 12px 12px; overflow: hidden; border: 1px solid var(--border);
+      border-top: none; aspect-ratio: 1;
+    }
+    .cm-cell {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 1rem .5rem; transition: background .3s;
+    }
+    .cm-tp { background: rgba(0,230,118,.1); }
+    .cm-fn { background: rgba(255,152,0,.1); }
+    .cm-fp { background: rgba(255,82,82,.1); }
+    .cm-tn { background: rgba(68,138,255,.1); }
+    .cm-val {
+      font-size: 2rem; font-weight: 900; font-variant-numeric: tabular-nums;
+      transition: color .3s;
+    }
+    .cm-tp .cm-val { color: var(--tp); }
+    .cm-fn .cm-val { color: var(--fn); }
+    .cm-fp .cm-val { color: var(--fp); }
+    .cm-tn .cm-val { color: var(--tn); }
+    .cm-lbl { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; opacity: .6; margin-top: .2rem; }
+
+    /* dot grid */
+    #dotGrid {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      padding: 1.1rem; background: rgba(255,255,255,.02);
+      border-radius: 12px; border: 1px solid var(--border);
+      min-height: 72px; margin: 1.25rem 0 .6rem;
+    }
+    .dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      transition: opacity .2s;
+    }
+    .dt { background: var(--tp); }
+    .dn { background: var(--tn); opacity: .65; }
+    .dp { background: var(--fp); }
+    .df { background: var(--fn); }
+    .dot-legend {
+      display: flex; flex-wrap: wrap; gap: .75rem;
+      font-size: .72rem; color: var(--muted);
+    }
+    .dl-item { display: flex; align-items: center; gap: .3rem; }
+    .dl-dot  { width: 9px; height: 9px; border-radius: 50%; }
+
+    /* sliders */
+    .sliders { display: flex; flex-direction: column; gap: 1.1rem; }
+    .sl-row { display: flex; flex-direction: column; gap: .4rem; }
+    .sl-head { display: flex; justify-content: space-between; align-items: center; }
+    .sl-name { font-size: .82rem; font-weight: 700; display: flex; align-items: center; gap: .4rem; }
+    .sl-num  { font-size: .95rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    input[type=range] {
+      -webkit-appearance: none; width: 100%; height: 5px;
+      border-radius: 3px; outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.45);
+    }
+
+    /* metrics */
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+    .mc {
+      border-radius: 12px; padding: 1.1rem; border: 1px solid;
+    }
+    .mc-prec { background: rgba(0,212,255,.06);   border-color: rgba(0,212,255,.25); }
+    .mc-rec  { background: rgba(124,77,255,.06);  border-color: rgba(124,77,255,.25); }
+    .mc-f1   { background: rgba(255,215,64,.06);  border-color: rgba(255,215,64,.25); }
+    .mc-acc  { background: rgba(105,240,174,.06); border-color: rgba(105,240,174,.25); }
+    .mc-tag {
+      font-size: .65rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .12em; margin-bottom: .35rem;
+    }
+    .mc-prec .mc-tag { color: var(--cyan); }
+    .mc-rec  .mc-tag { color: var(--purple); }
+    .mc-f1   .mc-tag { color: var(--yellow); }
+    .mc-acc  .mc-tag { color: var(--green); }
+    .mc-val {
+      font-size: 1.85rem; font-weight: 900; font-variant-numeric: tabular-nums;
+      transition: all .3s;
+    }
+    .mc-prec .mc-val { color: var(--cyan); }
+    .mc-rec  .mc-val { color: var(--purple); }
+    .mc-f1   .mc-val { color: var(--yellow); }
+    .mc-acc  .mc-val { color: var(--green); }
+    .mc-bar-bg { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; margin: .45rem 0; }
+    .mc-bar { height: 100%; border-radius: 3px; transition: width .4s cubic-bezier(.4,0,.2,1); }
+    .mc-prec .mc-bar { background: var(--cyan); }
+    .mc-rec  .mc-bar { background: var(--purple); }
+    .mc-f1   .mc-bar { background: var(--yellow); }
+    .mc-acc  .mc-bar { background: var(--green); }
+    .mc-formula { font-family: monospace; font-size: .65rem; color: var(--muted); margin-top: .35rem; }
+    .mc-hint { font-size: .7rem; color: var(--muted); margin-top: .35rem; font-style: italic; }
+
+    /* reset btn */
+    .btn {
+      padding: .4rem 1rem; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer;
+      font-size: .8rem; font-weight: 700; transition: all .18s;
+    }
+    .btn:hover { border-color: var(--text); color: var(--text); }
+
+    /* callout */
+    .callout {
+      margin-top: 2rem; padding: 1.25rem 1.5rem;
+      border-radius: 14px; border: 1px solid rgba(255,215,64,.3);
+      background: rgba(255,215,64,.05);
+    }
+    .callout h3 { font-size: .95rem; color: var(--yellow); margin-bottom: .4rem; }
+    .callout p { max-width: none; }
+    .link-btn {
+      display: inline-block; margin-top: .7rem; padding: .3rem .85rem;
+      border-radius: 6px; background: rgba(0,212,255,.1); border: 1px solid rgba(0,212,255,.3);
+      color: var(--cyan); font-size: .75rem; font-weight: 700; cursor: pointer;
+      transition: all .18s;
+    }
+    .link-btn:hover { background: rgba(0,212,255,.2); }
+
+    /* ── SCENARIOS ── */
+    .sc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 2rem; }
+    .sc-card {
+      border-radius: 14px; padding: 1.4rem; border: 1px solid var(--border);
+      background: var(--card); cursor: pointer; transition: all .2s;
+    }
+    .sc-card:hover { border-color: var(--cyan); transform: translateY(-2px); }
+    .sc-card.active { border-color: var(--cyan); background: rgba(0,212,255,.05); }
+    .sc-emoji { font-size: 1.8rem; margin-bottom: .6rem; }
+    .sc-card h3 { font-size: .95rem; margin-bottom: .3rem; }
+    .sc-card p { font-size: .78rem; color: var(--muted); max-width: none; margin-bottom: .6rem; }
+    .sc-tag { display: flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; }
+    .sc-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    .insight {
+      display: none; margin-top: 1.5rem; padding: 1.25rem 1.5rem;
+      border-radius: 14px; border: 1px solid;
+    }
+    .insight.on { display: block; }
+    .insight h4 { font-size: .9rem; margin-bottom: .4rem; }
+    .insight p { font-size: .82rem; color: var(--muted); max-width: none; }
+
+    /* ── THRESHOLD ── */
+    .th-wrap {
+      margin-top: 2rem; border-radius: 16px; border: 1px solid var(--border);
+      background: var(--card); padding: 1.75rem;
+    }
+    .th-legend { font-size: .78rem; color: var(--muted); margin-bottom: .9rem; display: flex; flex-wrap: wrap; gap: .85rem; }
+    canvas { display: block; width: 100%; border-radius: 8px; }
+    .th-slider-row { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .35rem; }
+    .th-slider-label { font-size: .85rem; font-weight: 700; white-space: nowrap; min-width: 110px; }
+    .th-hint { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); margin-bottom: 1.1rem; padding: 0 .3rem; }
+    .th-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: .85rem; }
+    .th-mc {
+      text-align: center; padding: .9rem; border-radius: 10px;
+      background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    }
+    .th-mc-name { font-size: .65rem; text-transform: uppercase; letter-spacing: .12em; margin-bottom: .2rem; }
+    .th-mc-val { font-size: 1.45rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .th-mc-hint { font-size: .65rem; color: var(--muted); margin-top: .2rem; font-style: italic; }
+
+    /* ── GLOSSARY ── */
+    .glos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; margin-top: 2rem; }
+    .gi { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .gi-head {
+      padding: .9rem 1.1rem; display: flex; justify-content: space-between;
+      align-items: center; cursor: pointer; background: var(--card);
+      transition: background .18s; user-select: none;
+    }
+    .gi-head:hover { background: rgba(0,212,255,.04); }
+    .gi-head h3 { font-size: .88rem; margin: 0; }
+    .gi-chev { transition: transform .2s; color: var(--muted); font-size: .8rem; }
+    .gi.open .gi-chev { transform: rotate(180deg); }
+    .gi-body { max-height: 0; overflow: hidden; transition: max-height .3s ease; background: rgba(255,255,255,.02); }
+    .gi.open .gi-body { max-height: 220px; }
+    .gi-inner { padding: .9rem 1.1rem; font-size: .82rem; color: #b0b0d0; line-height: 1.65; }
+    .formula { display: inline-block; background: rgba(255,255,255,.07); border: 1px solid var(--border); border-radius: 5px; padding: .15rem .45rem; font-family: monospace; font-size: .78rem; margin: .35rem 0; }
+
+    /* ── FOOTER ── */
+    footer { text-align: center; padding: 3rem 2rem 4rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .82rem; }
+
+    /* ── MOBILE ── */
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      .lab-grid { grid-template-columns: 1fr; }
+      .outcomes-grid { grid-template-columns: 1fr; }
+      .sc-grid { grid-template-columns: 1fr; }
+      .glos-grid { grid-template-columns: 1fr; }
+      .th-metrics { grid-template-columns: 1fr; }
+      .metrics-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ NAV ══════════ -->
+<nav>
+  <div class="nav-brand">ML Metrics 101</div>
+  <ul class="nav-links">
+    <li><a href="#outcomes">4 Outcomes</a></li>
+    <li><a href="#lab">Try It Live</a></li>
+    <li><a href="#scenarios">Scenarios</a></li>
+    <li><a href="#tradeoff">The Tradeoff</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ul>
+</nav>
+
+<!-- ══════════ HERO ══════════ -->
+<section style="text-align:center; max-width:860px; padding-top:6rem; padding-bottom:4rem;">
+  <div class="eyebrow">Machine Learning · Interactive Guide</div>
+  <h1>What the heck are <span style="color:var(--cyan)">Precision</span>, <span style="color:var(--purple)">Recall</span>, and <span style="color:var(--yellow)">F1 Score</span>?</h1>
+  <p style="font-size:1.1rem; margin:0 auto 1.75rem; max-width:54ch; color:#c0c0e0;">Your model made a bunch of predictions. These three metrics reveal how trustworthy it actually is — and each one tells a totally different story.</p>
+  <div class="badge-row" style="justify-content:center;">
+    <span class="badge b-cyan">Precision</span>
+    <span class="badge b-purple">Recall</span>
+    <span class="badge b-yellow">F1 Score</span>
+    <span class="badge b-green">Accuracy</span>
+  </div>
+  <p style="font-size:.85rem; color:var(--muted); max-width:none; margin:0;">No PhD required. Just drag some sliders and it'll click.</p>
+</section>
+
+<hr class="sep">
+
+<!-- ══════════ THE 4 OUTCOMES ══════════ -->
+<section id="outcomes">
+  <div class="eyebrow">Step 1 — The Building Blocks</div>
+  <h2>Every prediction falls into one of 4 buckets</h2>
+  <p>A classification model makes a decision: "Yes" or "No." But there are four different ways that can play out, and each one has a name. Once you know these four, the rest is simple math.</p>
+
+  <div class="tab-row" id="ctxTabs">
+    <button class="tab on" onclick="switchCtx('spam',this)">📧 Spam Filter</button>
+    <button class="tab" onclick="switchCtx('cancer',this)">🏥 Cancer Screening</button>
+    <button class="tab" onclick="switchCtx('dog',this)">🐶 Dog Detector</button>
+  </div>
+
+  <div class="outcomes-grid">
+    <div class="oc oc-tp">
+      <div class="oc-icon">✅</div>
+      <div class="oc-tag">True Positive (TP)</div>
+      <div class="oc-title">Correct Hit</div>
+      <p id="tp-desc">It was spam, and the model correctly flagged it.</p>
+      <div class="oc-example" id="tp-ex"><span>📬</span><span>"Win a free iPhone!" → Flagged as spam ✓</span></div>
+    </div>
+    <div class="oc oc-tn">
+      <div class="oc-icon">✅</div>
+      <div class="oc-tag">True Negative (TN)</div>
+      <div class="oc-title">Correct Pass</div>
+      <p id="tn-desc">It wasn't spam, and the model correctly let it through.</p>
+      <div class="oc-example" id="tn-ex"><span>📩</span><span>"Meeting at 3pm?" → Allowed through ✓</span></div>
+    </div>
+    <div class="oc oc-fp">
+      <div class="oc-icon">⚠️</div>
+      <div class="oc-tag">False Positive (FP) · "Type I Error"</div>
+      <div class="oc-title">False Alarm</div>
+      <p id="fp-desc">It wasn't spam, but the model flagged it anyway. Also called "crying wolf."</p>
+      <div class="oc-example" id="fp-ex"><span>😱</span><span>"Your invoice is ready" → Wrongly flagged ✗</span></div>
+    </div>
+    <div class="oc oc-fn">
+      <div class="oc-icon">❌</div>
+      <div class="oc-tag">False Negative (FN) · "Type II Error"</div>
+      <div class="oc-title">Missed It</div>
+      <p id="fn-desc">It was spam, but the model missed it entirely. The real danger zone.</p>
+      <div class="oc-example" id="fn-ex"><span>😬</span><span>"CLICK HERE NOW!!" → Landed in inbox ✗</span></div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ══════════ INTERACTIVE LAB ══════════ -->
+<section id="lab">
+  <div class="eyebrow">Step 2 — Play With It</div>
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem; margin-bottom:.5rem;">
+    <div>
+      <h2 style="margin-bottom:.3rem;">The Interactive Confusion Matrix</h2>
+      <p style="margin:0">Drag any slider and watch all four metrics recalculate in real time.</p>
+    </div>
+    <button class="btn" onclick="resetSliders()">↺ Reset</button>
+  </div>
+
+  <div class="lab-grid">
+    <!-- LEFT: matrix + dot grid -->
+    <div>
+      <div style="text-align:center; margin-bottom:.4rem;"><span class="axis-label">← Predicted by model →</span></div>
+      <div class="cm-wrap">
+        <div class="cm-vert"><span class="axis-label">← Actual →</span></div>
+        <div>
+          <div class="cm-header">
+            <div class="cm-hcell">Predicted Positive</div>
+            <div class="cm-hcell">Predicted Negative</div>
+          </div>
+          <div class="cm-grid">
+            <div class="cm-cell cm-tp"><div class="cm-val" id="cv-tp">45</div><div class="cm-lbl">True Positive</div></div>
+            <div class="cm-cell cm-fn"><div class="cm-val" id="cv-fn">5</div><div class="cm-lbl">False Negative</div></div>
+            <div class="cm-cell cm-fp"><div class="cm-val" id="cv-fp">10</div><div class="cm-lbl">False Positive</div></div>
+            <div class="cm-cell cm-tn"><div class="cm-val" id="cv-tn">40</div><div class="cm-lbl">True Negative</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="dotGrid"></div>
+      <div class="dot-legend">
+        <div class="dl-item"><div class="dl-dot" style="background:var(--tp)"></div>True Positive</div>
+        <div class="dl-item"><div class="dl-dot" style="background:var(--tn);opacity:.65"></div>True Negative</div>
+        <div class="dl-item"><div class="dl-dot" style="background:var(--fp)"></div>False Positive</div>
+        <div class="dl-item"><div class="dl-dot" style="background:var(--fn)"></div>False Negative</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: sliders + metric cards -->
+    <div>
+      <div class="card sliders" style="margin-bottom:1.1rem;">
+        <div class="sl-row">
+          <div class="sl-head">
+            <span class="sl-name" style="color:var(--tp)">✅ True Positives</span>
+            <span class="sl-num" style="color:var(--tp)" id="sn-tp">45</span>
+          </div>
+          <input type="range" id="sl-tp" min="0" max="100" value="45" oninput="updateMatrix()">
+        </div>
+        <div class="sl-row">
+          <div class="sl-head">
+            <span class="sl-name" style="color:var(--tn)">✅ True Negatives</span>
+            <span class="sl-num" style="color:var(--tn)" id="sn-tn">40</span>
+          </div>
+          <input type="range" id="sl-tn" min="0" max="100" value="40" oninput="updateMatrix()">
+        </div>
+        <div class="sl-row">
+          <div class="sl-head">
+            <span class="sl-name" style="color:var(--fp)">⚠️ False Positives</span>
+            <span class="sl-num" style="color:var(--fp)" id="sn-fp">10</span>
+          </div>
+          <input type="range" id="sl-fp" min="0" max="100" value="10" oninput="updateMatrix()">
+        </div>
+        <div class="sl-row">
+          <div class="sl-head">
+            <span class="sl-name" style="color:var(--fn)">❌ False Negatives</span>
+            <span class="sl-num" style="color:var(--fn)" id="sn-fn">5</span>
+          </div>
+          <input type="range" id="sl-fn" min="0" max="100" value="5" oninput="updateMatrix()">
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="mc mc-prec">
+          <div class="mc-tag">Precision</div>
+          <div class="mc-val" id="mv-prec">82%</div>
+          <div class="mc-bar-bg"><div class="mc-bar" id="mb-prec" style="width:82%"></div></div>
+          <div class="mc-formula">TP ÷ (TP + FP)</div>
+          <div class="mc-hint">"Of everything I flagged positive, how many were actually right?"</div>
+        </div>
+        <div class="mc mc-rec">
+          <div class="mc-tag">Recall</div>
+          <div class="mc-val" id="mv-rec">90%</div>
+          <div class="mc-bar-bg"><div class="mc-bar" id="mb-rec" style="width:90%"></div></div>
+          <div class="mc-formula">TP ÷ (TP + FN)</div>
+          <div class="mc-hint">"Of all real positives in the world, how many did I actually catch?"</div>
+        </div>
+        <div class="mc mc-f1">
+          <div class="mc-tag">F1 Score</div>
+          <div class="mc-val" id="mv-f1">86%</div>
+          <div class="mc-bar-bg"><div class="mc-bar" id="mb-f1" style="width:86%"></div></div>
+          <div class="mc-formula">2 × P × R ÷ (P + R)</div>
+          <div class="mc-hint">"The harmonic mean — the balanced score of both."</div>
+        </div>
+        <div class="mc mc-acc">
+          <div class="mc-tag">Accuracy</div>
+          <div class="mc-val" id="mv-acc">85%</div>
+          <div class="mc-bar-bg"><div class="mc-bar" id="mb-acc" style="width:85%"></div></div>
+          <div class="mc-formula">(TP + TN) ÷ Total</div>
+          <div class="mc-hint">"Overall, how often was the model right?"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <h3>⚠️ Why not just use Accuracy?</h3>
+    <p>Imagine a cancer model that just says "no cancer" for <em>every single patient</em>. If only 2% of people have cancer, it'd be <strong>98% accurate</strong> — but completely useless. Precision and Recall expose this. Try it: set TP=0, FP=0, FN=5, TN=95 and watch accuracy look great while precision and recall both crash to zero.</p>
+    <span class="link-btn" onclick="loadVals(0,95,0,5)">Load this broken model →</span>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ══════════ SCENARIOS ══════════ -->
+<section id="scenarios">
+  <div class="eyebrow">Step 3 — Real World</div>
+  <h2>Which metric matters most depends on the stakes</h2>
+  <p>The same model could be perfectly tuned for one problem and dangerously wrong for another. Click a scenario to see how the numbers shift.</p>
+
+  <div class="sc-grid">
+    <div class="sc-card" id="sc-spam" onclick="loadScenario('spam')">
+      <div class="sc-emoji">📧</div>
+      <h3>Email Spam Filter</h3>
+      <p>Blocking a real email is really annoying. Missing a spam email is only mildly annoying.</p>
+      <div class="sc-tag"><div class="sc-dot" style="background:var(--cyan)"></div><span style="color:var(--cyan)">Precision matters most</span></div>
+    </div>
+    <div class="sc-card" id="sc-cancer" onclick="loadScenario('cancer')">
+      <div class="sc-emoji">🏥</div>
+      <h3>Cancer Screening</h3>
+      <p>Missing a real cancer case is catastrophic. A false alarm just means more follow-up tests.</p>
+      <div class="sc-tag"><div class="sc-dot" style="background:var(--purple)"></div><span style="color:var(--purple)">Recall matters most</span></div>
+    </div>
+    <div class="sc-card" id="sc-fraud" onclick="loadScenario('fraud')">
+      <div class="sc-emoji">💳</div>
+      <h3>Fraud Detection</h3>
+      <p>Missing real fraud is costly. But blocking valid transactions damages customer trust.</p>
+      <div class="sc-tag"><div class="sc-dot" style="background:var(--yellow)"></div><span style="color:var(--yellow)">F1 Score matters most</span></div>
+    </div>
+  </div>
+
+  <div class="insight" id="sc-insight">
+    <h4 id="si-title"></h4>
+    <p id="si-body"></p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ══════════ THRESHOLD TRADEOFF ══════════ -->
+<section id="tradeoff">
+  <div class="eyebrow">Step 4 — The Tradeoff</div>
+  <h2>Precision vs. Recall: the eternal push-and-pull</h2>
+  <p>ML models don't output "yes/no" directly — they output a <strong>confidence score</strong> between 0–100%. You choose a <em>threshold</em>: above it, the model calls it positive. Below it, negative.</p>
+  <p>Move the threshold and watch precision and recall move in opposite directions. This is the core tradeoff every ML engineer navigates.</p>
+
+  <div class="th-wrap">
+    <div class="th-legend">
+      <span><span style="color:var(--tp)">●</span> Actually positive &nbsp; <span style="color:var(--fp)">●</span> Actually negative &nbsp; <span style="border:1px dashed rgba(255,255,255,.4); padding:0 .35rem; border-radius:3px; font-size:.7rem;">│ threshold line</span></span>
+      <span style="color:var(--muted)">Left of line = predicted negative &nbsp;·&nbsp; Right of line = predicted positive</span>
+    </div>
+    <canvas id="thCanvas" height="130"></canvas>
+    <div class="th-slider-row">
+      <span class="th-slider-label">Threshold: <strong id="th-val">50%</strong></span>
+      <input type="range" id="th-slider" min="1" max="99" value="50" style="flex:1" oninput="updateThreshold()">
+    </div>
+    <div class="th-hint">
+      <span>← Lower: catch everything (more FPs, fewer FNs)</span>
+      <span>Higher: only dead-certain calls (fewer FPs, more FNs) →</span>
+    </div>
+    <div class="th-metrics">
+      <div class="th-mc">
+        <div class="th-mc-name" style="color:var(--cyan)">Precision</div>
+        <div class="th-mc-val" id="t-prec" style="color:var(--cyan)">—</div>
+        <div class="th-mc-hint">Of what I flagged, how many were real?</div>
+      </div>
+      <div class="th-mc">
+        <div class="th-mc-name" style="color:var(--purple)">Recall</div>
+        <div class="th-mc-val" id="t-rec" style="color:var(--purple)">—</div>
+        <div class="th-mc-hint">Of all real positives, how many did I catch?</div>
+      </div>
+      <div class="th-mc">
+        <div class="th-mc-name" style="color:var(--yellow)">F1 Score</div>
+        <div class="th-mc-val" id="t-f1" style="color:var(--yellow)">—</div>
+        <div class="th-mc-hint">The balanced score — peaks somewhere in the middle</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ══════════ GLOSSARY ══════════ -->
+<section id="glossary">
+  <div class="eyebrow">Step 5 — The Adjacent Vocab</div>
+  <h2>Related terms you'll run into</h2>
+  <p>Once you've got Precision, Recall, and F1, these nearby concepts snap into place. Click any to expand.</p>
+
+  <div class="glos-grid">
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>🎯 Accuracy</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        The share of <em>all</em> predictions (both positive and negative) that were correct.
+        <div class="formula">(TP + TN) ÷ (TP + TN + FP + FN)</div>
+        Simple and intuitive — but dangerously misleading on imbalanced datasets. If 99% of emails are not spam, a model that always says "not spam" hits 99% accuracy while being totally useless.
+      </div></div>
+    </div>
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>🔭 Specificity (True Negative Rate)</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        Recall, but for the <em>negative</em> class. "Of all actual negatives, how many did I correctly identify?"
+        <div class="formula">TN ÷ (TN + FP)</div>
+        In medical tests, specificity asks: "How good is this test at clearing a <em>healthy</em> person?" High specificity means fewer false alarms.
+      </div></div>
+    </div>
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>📈 AUC-ROC</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        "Area Under the Receiver Operating Characteristic Curve." It measures how well a model separates positives from negatives <em>across every possible threshold at once</em>.
+        <br><br>
+        Score of <strong>1.0 = perfect</strong>. Score of <strong>0.5 = a coin flip</strong>. It's threshold-independent, making it great for comparing two different models head-to-head.
+      </div></div>
+    </div>
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>⚖️ Macro vs. Micro Averaging</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        When you have more than two classes (e.g. cat / dog / bird), you need to combine per-class metrics.
+        <br><br>
+        <strong>Macro:</strong> Average each class equally — a rare class counts as much as a common one.<br>
+        <strong>Micro:</strong> Pool all predictions together, weighting by class size.<br><br>
+        When class sizes are very unequal, micro-averaging usually tells a more realistic story.
+      </div></div>
+    </div>
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>🪤 Type I vs. Type II Errors</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        These come from classical statistics and map directly onto the confusion matrix:
+        <br><br>
+        <strong>Type I Error = False Positive</strong> — you cried wolf<br>
+        <strong>Type II Error = False Negative</strong> — you missed the wolf
+        <br><br>
+        Which is worse? Totally depends on the domain. In cancer screening, a Type II error (missed diagnosis) is far worse. In spam detection, Type I (flagging a real email) might matter more.
+      </div></div>
+    </div>
+    <div class="gi">
+      <div class="gi-head" onclick="toggleGi(this)">
+        <h3>🗂️ Confusion Matrix</h3><span class="gi-chev">▼</span>
+      </div>
+      <div class="gi-body"><div class="gi-inner">
+        The 2×2 grid you've been playing with above. It lays out all four outcomes (TP, TN, FP, FN) at a glance, showing exactly where the model is getting confused.
+        <br><br>
+        For multi-class problems (e.g., recognizing 10 handwritten digits), it grows into an N×N matrix where each cell shows how often class A was mistaken for class B.
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Built to make ML metrics actually click — no math degree required.</p>
+</footer>
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<script>
+// ─── CONTEXT SWITCHING ───────────────────────────────────────
+const CTX = {
+  spam: {
+    tp: ['It was spam', 'the model correctly flagged it'],
+    tn: ["It wasn't spam", 'the model correctly let it through'],
+    fp: ["It wasn't spam", 'the model falsely flagged it'],
+    fn: ['It was spam', 'the model missed it entirely'],
+    tp_ex: ['📬', '"Win a free iPhone!" → Flagged as spam ✓'],
+    tn_ex: ['📩', '"Meeting at 3pm?" → Allowed through ✓'],
+    fp_ex: ['😱', '"Your invoice is ready" → Wrongly flagged ✗'],
+    fn_ex: ['😬', '"CLICK HERE NOW!!" → Landed in inbox ✗'],
+  },
+  cancer: {
+    tp: ['Patient has cancer', 'the test correctly detected it'],
+    tn: ['Patient is healthy', 'the test correctly cleared them'],
+    fp: ['Patient is healthy', 'the test wrongly flagged cancer'],
+    fn: ['Patient has cancer', 'the test completely missed it'],
+    tp_ex: ['🔬', 'Cancer present → Test comes back positive ✓'],
+    tn_ex: ['💚', 'No cancer → Test comes back negative ✓'],
+    fp_ex: ['😰', 'Healthy patient → Told they might have cancer ✗'],
+    fn_ex: ['💀', 'Cancer present → Test says all clear ✗ (dangerous!)'],
+  },
+  dog: {
+    tp: ["There's a dog in the photo", 'the model correctly said "dog"'],
+    tn: ['No dog in the photo', 'the model correctly said "not a dog"'],
+    fp: ['No dog in the photo', 'the model wrongly said "dog"'],
+    fn: ["There's a dog in the photo", 'the model missed it'],
+    tp_ex: ['🐶', 'Dog photo → Detected as dog ✓'],
+    tn_ex: ['🌳', 'Cat photo → Not flagged as dog ✓'],
+    fp_ex: ['🐺', 'Wolf photo → Called a dog ✗'],
+    fn_ex: ['🙈', 'Dog photo → Not detected ✗'],
+  },
+};
+
+function switchCtx(key, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  btn.classList.add('on');
+  const c = CTX[key];
+  document.getElementById('tp-desc').textContent = c.tp[0] + ', and ' + c.tp[1] + '.';
+  document.getElementById('tn-desc').textContent = c.tn[0] + ', and ' + c.tn[1] + '.';
+  document.getElementById('fp-desc').textContent = c.fp[0] + ', but ' + c.fp[1] + '. Also called "crying wolf."';
+  document.getElementById('fn-desc').textContent = c.fn[0] + ', but ' + c.fn[1] + '. The real danger zone.';
+  document.getElementById('tp-ex').innerHTML = `<span>${c.tp_ex[0]}</span><span>${c.tp_ex[1]}</span>`;
+  document.getElementById('tn-ex').innerHTML = `<span>${c.tn_ex[0]}</span><span>${c.tn_ex[1]}</span>`;
+  document.getElementById('fp-ex').innerHTML = `<span>${c.fp_ex[0]}</span><span>${c.fp_ex[1]}</span>`;
+  document.getElementById('fn-ex').innerHTML = `<span>${c.fn_ex[0]}</span><span>${c.fn_ex[1]}</span>`;
+}
+
+// ─── METRICS ─────────────────────────────────────────────────
+function metrics(tp, tn, fp, fn) {
+  const precision = (tp + fp) > 0 ? tp / (tp + fp) : 0;
+  const recall    = (tp + fn) > 0 ? tp / (tp + fn) : 0;
+  const f1        = (precision + recall) > 0 ? 2 * precision * recall / (precision + recall) : 0;
+  const total     = tp + tn + fp + fn;
+  const accuracy  = total > 0 ? (tp + tn) / total : 0;
+  return { precision, recall, f1, accuracy };
+}
+
+function pct(v) { return Math.round(v * 100) + '%'; }
+
+function setSliderGradient(id, color) {
+  const el = document.getElementById(id);
+  const p = (el.value / el.max) * 100;
+  el.style.background = `linear-gradient(to right,${color} ${p}%,rgba(255,255,255,.1) ${p}%)`;
+}
+
+let dotSeed = 42;
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+function updateDotGrid(tp, tn, fp, fn) {
+  const grid = document.getElementById('dotGrid');
+  const total = tp + tn + fp + fn;
+  if (total === 0) {
+    grid.innerHTML = '<span style="color:var(--muted);font-size:.82rem;padding:.25rem 0">Move the sliders to populate the grid</span>';
+    return;
+  }
+  const scale = Math.min(1, 120 / total);
+  const types = [
+    ...Array(Math.round(tp * scale)).fill('dt'),
+    ...Array(Math.round(tn * scale)).fill('dn'),
+    ...Array(Math.round(fp * scale)).fill('dp'),
+    ...Array(Math.round(fn * scale)).fill('df'),
+  ];
+  // deterministic shuffle using seeded random
+  for (let i = types.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(dotSeed + i) * (i + 1));
+    [types[i], types[j]] = [types[j], types[i]];
+  }
+  grid.innerHTML = types.map(c => `<div class="dot ${c}"></div>`).join('');
+}
+
+function updateMatrix() {
+  const tp = +document.getElementById('sl-tp').value;
+  const tn = +document.getElementById('sl-tn').value;
+  const fp = +document.getElementById('sl-fp').value;
+  const fn = +document.getElementById('sl-fn').value;
+
+  // Update display numbers
+  ['tp','tn','fp','fn'].forEach(k => {
+    const v = +document.getElementById('sl-'+k).value;
+    document.getElementById('sn-'+k).textContent = v;
+    document.getElementById('cv-'+k).textContent = v;
+  });
+
+  // Slider gradients
+  setSliderGradient('sl-tp', 'var(--tp)');
+  setSliderGradient('sl-tn', 'var(--tn)');
+  setSliderGradient('sl-fp', 'var(--fp)');
+  setSliderGradient('sl-fn', 'var(--fn)');
+
+  // Metrics
+  const m = metrics(tp, tn, fp, fn);
+  document.getElementById('mv-prec').textContent = pct(m.precision);
+  document.getElementById('mv-rec').textContent  = pct(m.recall);
+  document.getElementById('mv-f1').textContent   = pct(m.f1);
+  document.getElementById('mv-acc').textContent  = pct(m.accuracy);
+  document.getElementById('mb-prec').style.width = pct(m.precision);
+  document.getElementById('mb-rec').style.width  = pct(m.recall);
+  document.getElementById('mb-f1').style.width   = pct(m.f1);
+  document.getElementById('mb-acc').style.width  = pct(m.accuracy);
+
+  updateDotGrid(tp, tn, fp, fn);
+}
+
+function loadVals(tp, tn, fp, fn) {
+  document.getElementById('sl-tp').value = tp;
+  document.getElementById('sl-tn').value = tn;
+  document.getElementById('sl-fp').value = fp;
+  document.getElementById('sl-fn').value = fn;
+  updateMatrix();
+  document.getElementById('lab').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetSliders() { loadVals(45, 40, 10, 5); }
+
+// ─── SCENARIOS ───────────────────────────────────────────────
+const SCENARIOS = {
+  spam: {
+    tp:30, tn:65, fp:3, fn:15,
+    title: '📧 Spam Filter — Precision first',
+    body: 'High precision, lower recall. We rarely block a real email (very low FP), but we miss some spam (higher FN). That\'s the right tradeoff — an angry boss email landing in spam is far worse than occasional spam slipping through.',
+    color: 'var(--cyan)',
+  },
+  cancer: {
+    tp:45, tn:38, fp:32, fn:2,
+    title: '🏥 Cancer Screening — Recall first',
+    body: 'High recall, lower precision. We flag many people for extra tests (high FP), but we almost never miss a real cancer case (very low FN). The cost of a missed diagnosis dwarfs the inconvenience of extra screening.',
+    color: 'var(--purple)',
+  },
+  fraud: {
+    tp:40, tn:48, fp:9, fn:9,
+    title: '💳 Fraud Detection — Balanced (F1 first)',
+    body: 'Both errors hurt. Missing fraud drains money. Blocking valid transactions drives customers to competitors. F1 Score keeps the model honest by demanding both precision and recall stay high.',
+    color: 'var(--yellow)',
+  },
+};
+
+function loadScenario(key) {
+  ['spam','cancer','fraud'].forEach(k => document.getElementById('sc-'+k).classList.remove('active'));
+  document.getElementById('sc-'+key).classList.add('active');
+  const s = SCENARIOS[key];
+  loadVals(s.tp, s.tn, s.fp, s.fn);
+  const box = document.getElementById('sc-insight');
+  document.getElementById('si-title').textContent = s.title;
+  document.getElementById('si-body').textContent  = s.body;
+  box.style.borderColor = s.color.replace('var(--', 'rgba(').replace(')', ',0.35)').replace('rgba(cyan', 'rgba(0,212,255').replace('rgba(purple', 'rgba(124,77,255').replace('rgba(yellow', 'rgba(255,215,64');
+  // simpler approach:
+  const colorMap = { spam: 'rgba(0,212,255', cancer: 'rgba(124,77,255', fraud: 'rgba(255,215,64' };
+  box.style.background  = colorMap[key] + ',0.05)';
+  box.style.borderColor = colorMap[key] + ',0.3)';
+  box.classList.add('on');
+}
+
+// ─── THRESHOLD DEMO ──────────────────────────────────────────
+// Pre-generated: [trueLabel, confidenceScore]
+// Positives: higher confidence, Negatives: lower confidence, with overlap
+const POINTS = (() => {
+  const pos = [.95,.92,.89,.87,.84,.81,.78,.75,.73,.70,.68,.65,.63,.60,.57,.54,.51,.47,.41,.34].map(c => ({ y:1, c }));
+  const neg = [.06,.09,.13,.17,.21,.25,.29,.32,.36,.39,.43,.46,.49,.53,.58,.62,.67,.71,.76,.82].map(c => ({ y:0, c }));
+  return [...pos, ...neg].sort((a,b) => a.c - b.c);
+})();
+
+function threshMetrics(t) {
+  let tp=0, tn=0, fp=0, fn=0;
+  for (const p of POINTS) {
+    const pred = p.c >= t ? 1 : 0;
+    if (p.y===1 && pred===1) tp++;
+    else if (p.y===0 && pred===0) tn++;
+    else if (p.y===0 && pred===1) fp++;
+    else fn++;
+  }
+  return metrics(tp, tn, fp, fn);
+}
+
+function drawThCanvas() {
+  const canvas = document.getElementById('thCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.getBoundingClientRect().width || canvas.offsetWidth || 800;
+  const cssH = 130;
+  canvas.width  = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const W = cssW, H = cssH;
+  const t = +document.getElementById('th-slider').value / 100;
+  const tx = t * W;
+
+  // background zones
+  ctx.fillStyle = 'rgba(124,77,255,0.07)';
+  ctx.fillRect(0, 0, tx, H);
+  ctx.fillStyle = 'rgba(0,212,255,0.07)';
+  ctx.fillRect(tx, 0, W - tx, H);
+
+  // zone labels
+  ctx.font = '11px -apple-system,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.textAlign = 'center';
+  if (tx > 90) ctx.fillText('Predicted Negative', tx / 2, 16);
+  if (W - tx > 110) ctx.fillText('Predicted Positive', tx + (W - tx) / 2, 16);
+
+  // x-axis tick labels
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font = '9px monospace';
+  for (let i = 0; i <= 10; i++) {
+    ctx.textAlign = 'center';
+    ctx.fillText(i * 10 + '%', (i / 10) * W, H - 3);
+  }
+
+  // dots
+  // Pre-compute jitter deterministically from index
+  POINTS.forEach((p, i) => {
+    const x = p.c * W;
+    const jitter = ((i * 137.5 + p.y * 61.3) % 1 + 1) % 1; // 0..1
+    const y = 24 + jitter * 70;
+    const isPredPos = p.c >= t;
+    let color;
+    if (p.y === 1 && isPredPos)  color = '#00e676'; // TP
+    else if (p.y === 0 && !isPredPos) color = 'rgba(68,138,255,0.65)'; // TN
+    else if (p.y === 0 && isPredPos)  color = '#ff5252'; // FP
+    else color = '#ff9800'; // FN
+
+    ctx.beginPath();
+    ctx.arc(x, y, p.y === 1 ? 6.5 : 5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // threshold line
+  ctx.beginPath();
+  ctx.moveTo(tx, 18); ctx.lineTo(tx, H - 14);
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function updateThreshold() {
+  const val = +document.getElementById('th-slider').value;
+  document.getElementById('th-val').textContent = val + '%';
+  const p = (val / 99) * 100;
+  document.getElementById('th-slider').style.background =
+    `linear-gradient(to right,rgba(255,255,255,.3) ${p}%,rgba(255,255,255,.08) ${p}%)`;
+  const m = threshMetrics(val / 100);
+  document.getElementById('t-prec').textContent = pct(m.precision);
+  document.getElementById('t-rec').textContent  = pct(m.recall);
+  document.getElementById('t-f1').textContent   = pct(m.f1);
+  drawThCanvas();
+}
+
+// ─── GLOSSARY ────────────────────────────────────────────────
+function toggleGi(head) {
+  head.closest('.gi').classList.toggle('open');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  updateMatrix();
+  // Wait one frame for canvas to have layout dimensions
+  requestAnimationFrame(() => {
+    updateThreshold();
+  });
+  window.addEventListener('resize', drawThCanvas);
+});
+</script>
+</body>
+</html>
