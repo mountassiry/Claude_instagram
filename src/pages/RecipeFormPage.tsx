@@ -5,17 +5,20 @@ import type { OfferProduct, Recipe, RecipeIngredient } from '../types';
 interface RecipeFormPageProps {
   recipes?: Recipe[];
   offers: OfferProduct[];
-  onSave: (recipe: Recipe) => void;
+  onCreate?: (recipe: Omit<Recipe, 'id'>) => Promise<string>;
+  onUpdate?: (recipe: Recipe) => Promise<void>;
 }
 
 function emptyIngredient(): RecipeIngredient {
   return { id: Math.random().toString(36).slice(2), name: '', quantity: '' };
 }
 
-export function RecipeFormPage({ recipes, offers, onSave }: RecipeFormPageProps) {
+export function RecipeFormPage({ recipes, offers, onCreate, onUpdate }: RecipeFormPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const existing = id ? recipes?.find((r) => r.id === id) : undefined;
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [title, setTitle] = useState(existing?.title ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
@@ -35,21 +38,33 @@ export function RecipeFormPage({ recipes, offers, onSave }: RecipeFormPageProps)
     setSteps((prev) => prev.map((s, i) => (i === index ? value : s)));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const recipe: Recipe = {
-      id: existing?.id ?? `custom-${Date.now()}`,
+    const recipeData = {
       title: title.trim(),
       description: description.trim(),
       servings,
       prepMinutes,
       imageEmoji,
-      isCustom: true,
+      isCustom: true as const,
       ingredients: ingredients.filter((i) => i.name.trim() !== ''),
       steps: steps.filter((s) => s.trim() !== ''),
     };
-    onSave(recipe);
-    navigate(`/recipes/${recipe.id}`);
+
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      if (existing) {
+        await onUpdate?.({ ...recipeData, id: existing.id });
+        navigate(`/recipes/${existing.id}`);
+      } else {
+        const newId = await onCreate?.(recipeData);
+        navigate(`/recipes/${newId}`);
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save the recipe. Please try again.');
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -138,9 +153,11 @@ export function RecipeFormPage({ recipes, offers, onSave }: RecipeFormPageProps)
           </button>
         </fieldset>
 
+        {saveError && <p className="form-error">{saveError}</p>}
+
         <div className="recipe-form__actions">
-          <button type="submit" className="button button--primary">
-            Save recipe
+          <button type="submit" className="button button--primary" disabled={isSaving}>
+            {isSaving ? 'Saving…' : 'Save recipe'}
           </button>
         </div>
       </form>

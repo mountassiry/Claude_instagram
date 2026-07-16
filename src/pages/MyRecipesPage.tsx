@@ -1,15 +1,31 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Recipe } from '../types';
 import { RecipeCard } from '../components/RecipeCard';
 
 interface MyRecipesPageProps {
   recipes: Recipe[];
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  isLoading?: boolean;
 }
 
-export function MyRecipesPage({ recipes, onDelete }: MyRecipesPageProps) {
+export function MyRecipesPage({ recipes, onDelete, isLoading }: MyRecipesPageProps) {
   const custom = recipes.filter((r) => r.isCustom);
   const starter = recipes.filter((r) => !r.isCustom);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      await onDelete(id);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete the recipe. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="page">
@@ -23,9 +39,13 @@ export function MyRecipesPage({ recipes, onDelete }: MyRecipesPageProps) {
         </Link>
       </div>
 
+      {deleteError && <p className="form-error">{deleteError}</p>}
+
       <section>
         <h2>Your recipes</h2>
-        {custom.length === 0 ? (
+        {isLoading ? (
+          <p>Loading your recipes…</p>
+        ) : custom.length === 0 ? (
           <p>You haven't created any recipes yet.</p>
         ) : (
           <div className="recipe-grid">
@@ -36,8 +56,12 @@ export function MyRecipesPage({ recipes, onDelete }: MyRecipesPageProps) {
                   <Link to={`/recipes/${recipe.id}/edit`} className="button button--small">
                     Edit
                   </Link>
-                  <button className="button button--small button--danger" onClick={() => onDelete(recipe.id)}>
-                    Delete
+                  <button
+                    className="button button--small button--danger"
+                    onClick={() => handleDelete(recipe.id)}
+                    disabled={deletingId === recipe.id}
+                  >
+                    {deletingId === recipe.id ? 'Deleting…' : 'Delete'}
                   </button>
                 </div>
               </div>

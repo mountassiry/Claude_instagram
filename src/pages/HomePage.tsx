@@ -7,9 +7,10 @@ import { getCurrentWeekRange, formatDateRange } from '../utils/week';
 interface HomePageProps {
   recipes: Recipe[];
   offers: OfferProduct[];
+  isLoading?: boolean;
 }
 
-export function HomePage({ recipes, offers }: HomePageProps) {
+export function HomePage({ recipes, offers, isLoading }: HomePageProps) {
   const weeklyRecipes = useMemo(() => pickWeeklyRecipes(recipes, offers, 10), [recipes, offers]);
   const { start, end } = useMemo(() => getCurrentWeekRange(), []);
 
@@ -19,6 +20,7 @@ export function HomePage({ recipes, offers }: HomePageProps) {
         <h1>This week's 10 recipes</h1>
         <p className="page__subtitle">
           Built from Jumbo's offers for {formatDateRange(start, end)} — save the most when you cook these.
+          {isLoading && ' Loading your recipes…'}
         </p>
       </div>
 

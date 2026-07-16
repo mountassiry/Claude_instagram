@@ -1,38 +1,55 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import type { Recipe } from '../types';
 import { STARTER_RECIPES } from '../data/starterRecipes';
+import { db } from '../config/firebase';
 
-const STORAGE_KEY = 'jumbo-weekly-recipes:custom-recipes';
+const RECIPES_COLLECTION = 'recipes';
 
-function loadCustomRecipes(): Recipe[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Recipe[]) : [];
-  } catch {
-    return [];
-  }
+/** Firestore rejects `undefined` field values; JSON round-tripping drops them. */
+function sanitize<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
 }
 
 export function useRecipes() {
-  const [customRecipes, setCustomRecipes] = useState<Recipe[]>(() => loadCustomRecipes());
+  const [customRecipes, setCustomRecipes] = useState<Recipe[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(customRecipes));
-  }, [customRecipes]);
-
-  const addRecipe = useCallback((recipe: Recipe) => {
-    setCustomRecipes((prev) => [recipe, ...prev]);
+    const recipesQuery = query(collection(db, RECIPES_COLLECTION), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      recipesQuery,
+      (snapshot) => {
+        setCustomRecipes(
+          snapshot.docs.map((docSnap) => ({ ...(docSnap.data() as Omit<Recipe, 'id'>), id: docSnap.id })),
+        );
+        setError(null);
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setIsLoading(false);
+      },
+    );
+    return unsubscribe;
   }, []);
 
-  const updateRecipe = useCallback((recipe: Recipe) => {
-    setCustomRecipes((prev) => prev.map((r) => (r.id === recipe.id ? recipe : r)));
-  }, []);
+  const addRecipe = async (recipe: Omit<Recipe, 'id'>): Promise<string> => {
+    const docRef = await addDoc(collection(db, RECIPES_COLLECTION), { ...sanitize(recipe), createdAt: Date.now() });
+    return docRef.id;
+  };
 
-  const deleteRecipe = useCallback((id: string) => {
-    setCustomRecipes((prev) => prev.filter((r) => r.id !== id));
-  }, []);
+  const updateRecipe = async (recipe: Recipe): Promise<void> => {
+    const { id, ...rest } = recipe;
+    await updateDoc(doc(db, RECIPES_COLLECTION, id), sanitize(rest));
+  };
+
+  const deleteRecipe = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, RECIPES_COLLECTION, id));
+  };
 
   const allRecipes = [...customRecipes, ...STARTER_RECIPES];
 
-  return { customRecipes, allRecipes, addRecipe, updateRecipe, deleteRecipe };
+  return { customRecipes, allRecipes, addRecipe, updateRecipe, deleteRecipe, isLoading, error };
 }

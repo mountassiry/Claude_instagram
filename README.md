@@ -21,9 +21,26 @@ If real offer data becomes available later (an approved partner API, or manually
 
 - React + TypeScript + Vite
 - react-router-dom for routing
-- No backend — your own recipes and shopping list are saved in the browser's `localStorage`
+- **Firebase Firestore** — your own recipes are stored in a real database, synced in real time
+- Shopping list is saved in the browser's `localStorage` (it's a personal scratch list, not shared)
 
 ## Getting started
+
+### Firebase setup
+
+Your recipes are stored in Firestore, so you need a Firebase project:
+
+1. Go to the [Firebase Console](https://console.firebase.google.com) and create a project.
+2. Enable **Firestore Database** (Build > Firestore Database > Create database).
+3. Deploy the security rules in `firestore.rules` (Firestore Database > Rules, paste the file's contents, publish). These rules have no authentication to check against — they only validate that saved recipes look like recipes — so **anyone with your app's URL can create or delete recipes**. Add Firebase Auth and scope the rules to `request.auth.uid` if you need recipes to be private.
+4. Project Settings > General > Your apps > Add app > Web, then copy the config values.
+5. Copy `.env.example` to `.env` and fill in the values from step 4:
+
+```bash
+cp .env.example .env
+```
+
+### Run the app
 
 ```bash
 npm install
@@ -31,6 +48,17 @@ npm run dev
 ```
 
 Then open the printed local URL in your browser.
+
+### Developing without a real Firebase project
+
+You can run against the local Firestore emulator instead of a real project — no Firebase account needed:
+
+```bash
+npm install -g firebase-tools   # if you don't have it
+firebase emulators:start --only firestore
+```
+
+Then set `VITE_USE_FIREBASE_EMULATOR=true` in `.env` (the other `VITE_FIREBASE_*` values can be any placeholder strings when only using the emulator).
 
 ### Other scripts
 
@@ -47,8 +75,10 @@ src/
 ├── data/
 │   ├── offerProducts.ts   # mock weekly Jumbo offers — swap for a real source here
 │   └── starterRecipes.ts  # seed recipes so the weekly picks aren't empty on first run
+├── config/
+│   └── firebase.ts         # Firebase app + Firestore initialization
 ├── hooks/
-│   ├── useRecipes.ts       # recipe CRUD, persisted to localStorage
+│   ├── useRecipes.ts       # recipe CRUD, persisted to Firestore
 │   └── useShoppingList.ts  # shopping list state, persisted to localStorage
 ├── utils/
 │   ├── matching.ts         # ranks recipes by how many ingredients are on offer
