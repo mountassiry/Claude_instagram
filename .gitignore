@@ -1,33 +1,14 @@
 # Dependencies
 node_modules/
-npm-debug.log
-yarn-error.log
-yarn-debug.log
 
-# Expo
-.expo/
+# Build output
 dist/
-web-build/
+dist-ssr/
+*.local
 
-# Native builds
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# Debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
+# Logs
+*.log
+npm-debug.log*
 
 # Local env files
 .env
@@ -39,16 +20,11 @@ yarn-error.*
 # TypeScript
 *.tsbuildinfo
 
-# Testing
-coverage/
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Temporary files
-*.log
-tmp/
-temp/
+# macOS
+.DS_Store
