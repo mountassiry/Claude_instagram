@@ -1,5 +1,6 @@
 import type { OfferProduct, ProductCategory } from '../types';
 import { getCurrentWeekRange } from '../utils/week';
+import scrapedOffers from './scrapedOffers.json';
 
 interface ProductTemplate {
   id: string;
@@ -73,12 +74,20 @@ function toOffer(t: ProductTemplate, validFrom: string, validUntil: string): Off
 }
 
 /**
- * Stand-in for Jumbo's real weekly offers. Swap this implementation for a
- * real data source (an approved API, or manually curated data) without
- * touching anything else in the app — everything downstream just consumes
- * `OfferProduct[]`.
+ * This week's Jumbo offers.
+ *
+ * If `scrapedOffers.json` has been populated by the scraper (see
+ * `scraper/README.md`), those real offers are used. Otherwise the app falls
+ * back to the built-in mock catalog so it still works out of the box.
+ * Everything downstream just consumes `OfferProduct[]` and doesn't care which
+ * source it came from.
  */
 export function getThisWeeksOffers(referenceDate: Date = new Date()): OfferProduct[] {
+  const scraped = scrapedOffers as OfferProduct[];
+  if (scraped.length > 0) {
+    return scraped;
+  }
+
   const { start, end } = getCurrentWeekRange(referenceDate);
   const validFrom = start.toISOString();
   const validUntil = end.toISOString();

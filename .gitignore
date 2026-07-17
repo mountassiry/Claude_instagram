@@ -20,6 +20,9 @@ npm-debug.log*
 # TypeScript
 *.tsbuildinfo
 
+# Scraper debug artifacts
+scraper/debug/
+
 # IDE
 .idea/
 .vscode/

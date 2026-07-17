@@ -17,6 +17,9 @@ export interface OfferProduct {
   validFrom: string;
   validUntil: string;
   imageEmoji: string;
+  /** Present when the offer came from the scraper rather than the mock catalog. */
+  imageUrl?: string;
+  productUrl?: string;
 }
 
 export interface RecipeIngredient {
