@@ -1,14 +1,21 @@
 /**
- * Tests for the pure parsing/normalization helpers. These don't touch the
- * network or a browser — they check that realistic Jumbo promotion strings are
- * turned into sensible OfferProduct data.
+ * Tests for the Jumbo scraper.
+ *
+ *  - Unit tests for the pure promo-label parser / normalizer (no browser).
+ *  - An integration test that runs the real DOM extraction against a saved
+ *    sample of the offers page loaded via file:// — this validates the CSS
+ *    selectors against Jumbo's actual markup without any network access.
  *
  * Run: node scraper/scrapeJumbo.test.mjs
  */
 import assert from 'node:assert/strict';
-import { categoryFor, normalize } from './scrapeJumbo.mjs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { chromium } from 'playwright';
+import { normalize, parseAmounts, extractFromDom } from './scrapeJumbo.mjs';
 
-const week = { validFrom: '2026-01-01T00:00:00.000Z', validUntil: '2026-01-07T00:00:00.000Z' };
+const __dirname = dirname(fileURLToPath(import.meta.url));
 let passed = 0;
 const check = (name, fn) => {
   fn();
@@ -16,62 +23,111 @@ const check = (name, fn) => {
   console.log('  ✓', name);
 };
 
-console.log('categoryFor:');
-check('classifies meat', () => assert.equal(categoryFor('Jumbo Kipfilet'), 'Vlees & Vis'));
-check('classifies produce', () => assert.equal(categoryFor('Broccoli'), 'Groente & Fruit'));
-check('classifies dairy', () => assert.equal(categoryFor('Goudse jong belegen kaas'), 'Zuivel & Eieren'));
-check('falls back to a default', () => assert.equal(categoryFor('Iets heel exotisch'), 'Kruiden & Sauzen'));
+console.log('parseAmounts:');
+check('pulls prices from a multibuy label', () =>
+  assert.deepEqual(parseAmounts('2 voor 5,00'), [5.0]),
+);
+check('pulls a single price', () => assert.deepEqual(parseAmounts('voor 0,99'), [0.99]));
+check('returns nothing for a percentage label', () => assert.deepEqual(parseAmounts('25% korting'), []));
 
-console.log('normalize — "van X voor Y":');
-check('parses from/for prices', () => {
-  const o = normalize({ name: 'Zalmfilet', priceText: 'van €7.99 voor €5.99' }, week);
-  assert.equal(o.regularPrice, 7.99);
-  assert.equal(o.offerPrice, 5.99);
+console.log('normalize:');
+check('multibuy -> per-unit offer price + keeps label', () => {
+  const o = normalize({ id: '1', name: 'Aardbeien', promoText: '2 voor 5,00', category: 'Groente' });
+  assert.equal(o.offerPrice, 2.5);
+  assert.equal(o.regularPrice, 2.5);
+  assert.equal(o.discountLabel, '2 voor 5,00');
+  assert.equal(o.category, 'Groente');
 });
-
-console.log('normalize — percentage:');
-check('derives regular price from % off', () => {
-  const o = normalize({ name: 'Kipfilet', priceText: '€4.19', promoText: '25% korting' }, week);
-  assert.equal(o.offerPrice, 4.19);
-  // 4.19 / (1 - 0.25) = 5.5867 -> 5.59
-  assert.equal(o.regularPrice, 5.59);
+check('"voor P,PP" -> offer price', () => {
+  const o = normalize({ id: '2', name: 'Krieltjes', promoText: 'voor 0,99' });
+  assert.equal(o.offerPrice, 0.99);
+});
+check('"P,PP per 100 gram" -> offer price', () => {
+  const o = normalize({ id: '3', name: 'Karbonade', promoText: '0,69 per 100 gram' });
+  assert.equal(o.offerPrice, 0.69);
+  assert.equal(o.discountLabel, '0,69 per 100 gram');
+});
+check('percentage label -> price 0, label preserved', () => {
+  const o = normalize({ id: '4', name: 'Bessen', promoText: '25% korting' });
+  assert.equal(o.offerPrice, 0);
   assert.equal(o.discountLabel, '25% korting');
 });
-
-console.log('normalize — multibuy "2 voor 3":');
-check('computes per-unit offer price', () => {
-  const o = normalize({ name: 'Passata', priceText: '€1.79', promoText: '2 voor €3.00' }, week);
-  assert.equal(o.offerPrice, 1.5); // 3.00 / 2
-  assert.equal(o.regularPrice, 1.79); // highest amount seen = original single price
-  assert.equal(o.discountLabel, '2 voor €3.00');
+check('carries dates, image, url and makes a fallback id', () => {
+  const o = normalize({
+    name: 'Broccoli',
+    promoText: 'voor 0,89',
+    validFrom: '2026-07-15T00:01:00+02:00',
+    validUntil: '2026-07-21T23:59:59+02:00',
+    imageUrl: 'https://example.com/b.png',
+    productUrl: '/aanbiedingen/broccoli/123',
+  });
+  assert.equal(o.validFrom, '2026-07-15T00:01:00+02:00');
+  assert.equal(o.imageUrl, 'https://example.com/b.png');
+  assert.equal(o.productUrl, '/aanbiedingen/broccoli/123');
+  assert.ok(o.id.length > 0 && !o.id.includes(' '));
 });
 
-console.log('normalize — general shape:');
-check('keeps unit, dates, image url, and makes an id', () => {
-  const o = normalize(
-    {
-      name: "Jumbo Paprika's Gemengd",
-      priceText: '€1.87',
-      unit: '3 stuks',
-      imageUrl: 'https://example.com/paprika.jpg',
-      productUrl: '/producten/paprika',
-    },
-    week,
-  );
-  assert.equal(o.unit, '3 stuks');
-  assert.equal(o.validFrom, week.validFrom);
-  assert.equal(o.validUntil, week.validUntil);
-  assert.equal(o.imageUrl, 'https://example.com/paprika.jpg');
-  assert.equal(o.productUrl, '/producten/paprika');
-  assert.ok(o.id.length > 0 && !o.id.includes(' '), 'id should be a non-empty slug');
-  assert.equal(o.category, 'Groente & Fruit');
-});
+async function integration() {
+  const samplePath = resolve(__dirname, '../', 'scraper-sample.html');
+  const envSample = process.env.JUMBO_SAMPLE_HTML;
+  const path = envSample && existsSync(envSample) ? envSample : samplePath;
+  if (!existsSync(path)) {
+    console.log('\nintegration: skipped (no sample HTML found; set JUMBO_SAMPLE_HTML to run)');
+    return;
+  }
 
-check('handles a bare price with no promo text', () => {
-  const o = normalize({ name: 'Melk', priceText: '€1.09' }, week);
-  assert.equal(o.offerPrice, 1.09);
-  assert.equal(o.regularPrice, 1.09);
-  assert.equal(o.discountLabel, 'Aanbieding');
-});
+  console.log('\nintegration (DOM extraction against saved sample):');
+  const browser = await chromium.launch({
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto('file://' + path, { waitUntil: 'domcontentloaded' });
+    const raw = await extractFromDom(page, {
+      section: 'section.category-section',
+      sectionTitle: '[data-testid="category-title"], h4.category-heading',
+      tile: 'article[data-testid="promotion-card"], article.card-promotion',
+      title: '.title-link',
+      image: 'img',
+      link: '.title-link',
+      tag: '.jum-tag',
+      tagLower: '.lower',
+    });
 
+    check('finds all article tiles across aisle sections', () => assert.ok(raw.length >= 7, `got ${raw.length}`));
+    const byId = Object.fromEntries(raw.map((r) => [r.id, r]));
+
+    check('reads title, aisle, promo, dates, url from a normal tile', () => {
+      const a = byId['3019709'];
+      assert.equal(a.name, 'Nederlandse aardbeien');
+      assert.equal(a.category, 'Aardappelen, groente en fruit');
+      assert.equal(a.promoText, '2 voor 5,00');
+      assert.equal(a.productUrl, '/aanbiedingen/nederlandse-aardbeien/3019709');
+      assert.equal(a.validFrom, '2026-07-15T00:01:00+02:00');
+    });
+    check('reads the .lower price from a stacked ("Alleen online") tag', () => {
+      const b = byId['3019730'];
+      assert.equal(b.name, 'Broccoli');
+      assert.equal(b.promoText, 'voor 0,89'); // not "Alleen online voor 0,89"
+    });
+    check('picks up the second aisle section too', () => {
+      assert.equal(byId['3018527'].category, 'Vlees, vis en vega');
+      assert.equal(byId['3018527'].promoText, 'voor 1,99');
+    });
+
+    console.log('\nnormalized sample:');
+    const normalized = raw.map(normalize);
+    check('every offer normalizes with an id, name and label', () =>
+      assert.ok(normalized.every((o) => o.id && o.name && o.discountLabel)),
+    );
+    console.log(
+      '  →',
+      normalized.map((o) => `${o.name} [${o.category}] ${o.discountLabel}`).join('\n    '),
+    );
+  } finally {
+    await browser.close();
+  }
+}
+
+await integration();
 console.log(`\nAll ${passed} assertions passed.`);

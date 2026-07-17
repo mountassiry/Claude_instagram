@@ -41,28 +41,37 @@ weekly top-10 recipes, the Offers page, and the recipe savings.
 ### Options
 
 ```bash
-npm run scrape -- --debug     # also dump raw HTML, __NEXT_DATA__ and a
-                              # screenshot to scraper/debug/ for inspection
-npm run scrape -- --headed    # run with a visible browser window to watch it
+npm run scrape -- --debug            # also dump raw HTML + a screenshot to
+                                     # scraper/debug/ for inspection
+npm run scrape -- --headed           # run with a visible browser to watch it
+npm run scrape -- --from-file x.html # scrape a saved HTML file offline (used
+                                     # for testing selectors without network)
 ```
 
 ## How it works
 
-The scraper tries two strategies, in order:
+The offers page is a Nuxt app that renders every offer into the DOM as an
+`<article data-testid="promotion-card">`, grouped into per-aisle
+`<section class="category-section">` blocks (e.g. "Aardappelen, groente en
+fruit", "Vlees, vis en vega"). The scraper walks those sections and, for each
+tile, reads the product title, the promotion label, the image, the product
+link, and the start/expiration dates, tagging each offer with its aisle name.
 
-1. **`__NEXT_DATA__`** — Jumbo is a Next.js site, so the page often embeds its
-   data as JSON in a `<script id="__NEXT_DATA__">` tag. The scraper walks that
-   JSON looking for product-shaped objects. This is the most reliable source
-   when it's present.
-2. **DOM scraping** — if the JSON strategy finds too little, it falls back to
-   reading text out of the rendered product tiles using the selectors in the
-   `SELECTORS` block at the top of `scrapeJumbo.mjs`.
+The selectors live in the `SELECTORS` block at the top of `scrapeJumbo.mjs`.
 
-Whatever it finds is normalized into the app's `OfferProduct` shape: it keeps
-the original Dutch promotion text as the discount label, does best-effort
-parsing of "van €X voor €Y", "2 voor €3", and "25% korting" style promotions
-into regular/offer prices, and maps each product into one of the app's fixed
-categories by keyword.
+**About prices:** the offers overview page only shows a _promotion label_
+("2 voor 5,00", "voor 0,99", "25% korting", "1+1 gratis") — there is **no
+original/regular price** on this page. So each offer keeps the exact Dutch label
+as `discountLabel`, and `offerPrice`/`regularPrice` are a best-effort parse from
+that label (often equal, i.e. no computable saving; `0` when the label is a
+pure percentage/gift promo).
+
+## Testing
+
+`node scraper/scrapeJumbo.test.mjs` runs unit tests for the label parser plus an
+integration test that loads a saved sample of the offers page over `file://`
+and checks the DOM selectors — no network needed. Point `JUMBO_SAMPLE_HTML` at a
+saved copy of the real page to validate the selectors against the latest markup.
 
 ## Fixing selectors
 
@@ -71,7 +80,6 @@ If a run prints `No offers extracted`:
 1. Run `npm run scrape -- --debug`.
 2. Open `scraper/debug/page.html` (or `page.png`) and find an offer tile.
 3. Update the `SELECTORS` object at the top of `scraper/scrapeJumbo.mjs` so
-   `tile`/`name`/`price`/`promo` point at the right elements.
-4. Also check `scraper/debug/next-data.json` — if the offers are in there, it's
-   usually cleaner to adjust the `looksLikeProduct` heuristic in
-   `extractFromNextData` instead.
+   `section`/`tile`/`title`/`tag` point at the right elements.
+4. Re-run the tests against a saved copy of the page:
+   `JUMBO_SAMPLE_HTML=/path/to/page.html node scraper/scrapeJumbo.test.mjs`.

@@ -11,16 +11,26 @@
  * What it does:
  *   1. Opens https://www.jumbo.com/aanbiedingen/nu in a headless browser.
  *   2. Accepts the cookie banner and scrolls to load every offer tile.
- *   3. Extracts each offer (name, prices, promotion text, image, link).
+ *   3. Reads the "Per gangpad" (per-aisle) sections. Each aisle is a
+ *      <section class="category-section"> with an <h4 data-testid="category-title">
+ *      heading and a grid of <article data-testid="promotion-card"> tiles.
  *   4. Normalizes them into the app's OfferProduct shape.
  *   5. Writes src/data/scrapedOffers.json, which the app prefers over its
  *      built-in mock data.
  *
+ * Note on prices: the offers overview page only exposes the *promotion label*
+ * ("2 voor 5,00", "voor 0,99", "25% korting", "1+1 gratis") — there is no
+ * original/regular price on this page. So `discountLabel` always holds the real
+ * offer text, and `regularPrice`/`offerPrice` are a best-effort parse (often
+ * equal, meaning "no computable saving").
+ *
  * Usage:
  *   node scraper/scrapeJumbo.mjs            # scrape + write scrapedOffers.json
- *   node scraper/scrapeJumbo.mjs --debug    # also dump raw HTML, __NEXT_DATA__,
- *                                           # and a screenshot to scraper/debug/
+ *   node scraper/scrapeJumbo.mjs --debug    # also dump raw HTML + a screenshot
  *   node scraper/scrapeJumbo.mjs --headed   # watch it run in a real window
+ *   node scraper/scrapeJumbo.mjs --from-file ./page.html   # scrape a saved HTML
+ *                                                          # file (offline; for
+ *                                                          # testing selectors)
  *
  * Because this environment (and CI) can't reach jumbo.com, run it on a machine
  * with normal internet access. See scraper/README.md.
@@ -28,7 +38,7 @@
 
 import { chromium } from 'playwright';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, isAbsolute } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,99 +47,59 @@ const OFFERS_URL = 'https://www.jumbo.com/aanbiedingen/nu';
 const OUTPUT_FILE = resolve(REPO_ROOT, 'src/data/scrapedOffers.json');
 const DEBUG_DIR = resolve(__dirname, 'debug');
 
-const args = new Set(process.argv.slice(2));
-const DEBUG = args.has('--debug');
-const HEADED = args.has('--headed');
+const args = process.argv.slice(2);
+const flags = new Set(args.filter((a) => a.startsWith('--')));
+const DEBUG = flags.has('--debug');
+const HEADED = flags.has('--headed');
+const fromFileIdx = args.indexOf('--from-file');
+const FROM_FILE = fromFileIdx !== -1 ? args[fromFileIdx + 1] : null;
 
 // ---------------------------------------------------------------------------
 // CONFIG — the parts most likely to need tweaking when Jumbo changes its HTML.
-// If the DOM strategy stops finding products, run with --debug, open
+// If a run stops finding products, re-run with --debug, open
 // scraper/debug/page.html, find the offer tiles, and update these selectors.
 // ---------------------------------------------------------------------------
 const SELECTORS = {
-  // Candidate selectors for a single product/offer tile. The first one that
-  // matches several elements wins.
-  tile: [
-    'article[data-jsku]',
-    'article.product-container',
-    '[data-testid="product-card"]',
-    'article',
-  ],
-  name: ['[data-testid="product-title"]', '.name', 'h3', 'h2', 'a[title]'],
-  price: ['[data-testid="product-price"]', '.price', '[class*="price"]'],
-  promo: ['[data-testid="promotion"]', '.promotion', '[class*="promo"]', '[class*="tag"]'],
-  image: ['img'],
-  link: ['a[href]'],
+  section: 'section.category-section',
+  sectionTitle: '[data-testid="category-title"], h4.category-heading',
+  tile: 'article[data-testid="promotion-card"], article.card-promotion',
+  title: '.title-link',
+  image: 'img',
+  link: '.title-link',
+  tag: '.jum-tag',
+  tagLower: '.lower',
 };
 
-// Map Jumbo's free-text categories onto the app's fixed ProductCategory union.
-// Keywords match as the *start of a word* (see categoryFor), so 'kip' matches
-// "kipfilet" but 'ui' does not match "fruit". This is best-effort — the app
-// only uses the category to group offers, so an occasional miss is cosmetic.
-const CATEGORY_KEYWORDS = {
-  'Vlees & Vis': [
-    'vlees', 'vis', 'kip', 'gehakt', 'zalm', 'garnal', 'spek', 'worst', 'ham', 'rund',
-    'varken', 'schnitzel', 'burger', 'filet', 'haring', 'tonijn', 'kabeljauw', 'bacon',
-  ],
-  'Groente & Fruit': [
-    'groente', 'fruit', 'aardappel', 'tomaat', 'salade', 'appel', 'banaan', 'paprika',
-    'broccoli', 'bloemkool', 'wortel', 'komkommer', 'courgette', 'champignon', 'avocado',
-    'citroen', 'peer', 'druif', 'sinaasappel', 'spinazie', 'ui', 'knoflook', 'prei', 'mango',
-  ],
-  'Zuivel & Eieren': [
-    'zuivel', 'kaas', 'melk', 'yoghurt', 'boter', 'ei', 'eieren', 'room', 'slagroom',
-    'kwark', 'vla', 'mozzarella', 'parmezaan', 'creme',
-  ],
-  'Broodbeleg & Bakkerij': [
-    'brood', 'bakker', 'beleg', 'broodje', 'ciabatta', 'wrap', 'krentenbol', 'croissant',
-    'bagel', 'tortilla', 'cracker', 'beschuit',
-  ],
-  'Pasta, Rijst & Wereldkeuken': [
-    'pasta', 'rijst', 'noedel', 'wereld', 'wok', 'taco', 'kokos', 'curry', 'penne',
-    'spaghetti', 'macaroni', 'basmati', 'noodle',
-  ],
-  'Kruiden & Sauzen': [
-    'kruid', 'saus', 'olie', 'azijn', 'pesto', 'specerij', 'peper', 'zout', 'passata',
-    'ketchup', 'mayonaise', 'mosterd', 'soja',
-  ],
-};
-const DEFAULT_CATEGORY = 'Kruiden & Sauzen';
+// Emoji per Jumbo aisle, since the app UI shows an emoji (the real image URL is
+// also stored on the offer as imageUrl for later use).
+const AISLE_EMOJI = [
+  [/aardappel|groente|fruit/i, '🥦'],
+  [/vlees|vis|vega/i, '🥩'],
+  [/brood|gebak|bakker/i, '🍞'],
+  [/zuivel|boter|ei/i, '🧀'],
+  [/vleeswaren|kaas|tapas/i, '🧀'],
+  [/maaltijd|gemak/i, '🍽️'],
+  [/conserven|soep|saus|oli/i, '🥫'],
+  [/wereldkeuken|kruid|pasta|rijst/i, '🍝'],
+  [/koek|snoep|chocolade|chips/i, '🍫'],
+  [/koffie|thee/i, '☕'],
+  [/frisdrank|sap/i, '🥤'],
+  [/bier|wijn/i, '🍺'],
+  [/diepvries/i, '🧊'],
+  [/drogisterij|gezondheid/i, '🧴'],
+  [/baby|kind/i, '🍼'],
+  [/huishouden|dier/i, '🧽'],
+];
 
-// A rough emoji per category, since the UI shows emoji not photos (the real
-// image URL is still stored on the offer as imageUrl for later use).
-const CATEGORY_EMOJI = {
-  'Vlees & Vis': '🥩',
-  'Groente & Fruit': '🥦',
-  'Zuivel & Eieren': '🧀',
-  'Broodbeleg & Bakkerij': '🍞',
-  'Pasta, Rijst & Wereldkeuken': '🍝',
-  'Kruiden & Sauzen': '🫙',
-};
+function emojiForAisle(aisle) {
+  for (const [re, emoji] of AISLE_EMOJI) {
+    if (re.test(aisle || '')) return emoji;
+  }
+  return '🛒';
+}
 
 function log(...m) {
   console.log('[scrape]', ...m);
-}
-
-/** Best-effort week window (Mon–Sun) for offers that don't carry explicit dates. */
-export function currentWeekRange(now = new Date()) {
-  const day = now.getDay();
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const start = new Date(now);
-  start.setDate(now.getDate() + diffToMonday);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { validFrom: start.toISOString(), validUntil: end.toISOString() };
-}
-
-export function categoryFor(text) {
-  const haystack = (text || '').toLowerCase();
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    // Match a keyword only at the start of a word, so 'kip' matches "kipfilet"
-    // but 'ui' doesn't match "fruit".
-    if (keywords.some((k) => new RegExp(`\\b${k}`, 'i').test(haystack))) return category;
-  }
-  return DEFAULT_CATEGORY;
 }
 
 function slug(text) {
@@ -142,73 +112,101 @@ function slug(text) {
     .slice(0, 60);
 }
 
-/** Pull the first and (optional) second euro amount out of a price/promo blob. */
-export function parsePrices(raw) {
-  if (!raw) return {};
-  const matches = [...raw.matchAll(/(\d+)[.,](\d{2})/g)].map(
-    (m) => Number(`${m[1]}.${m[2]}`),
-  );
-  const wholeEuro = [...raw.matchAll(/(?:€|EUR)\s*(\d+)(?![.,]\d)/g)].map((m) => Number(m[1]));
-  const all = [...matches, ...wholeEuro].filter((n) => Number.isFinite(n) && n > 0);
-  return { amounts: all };
+/** Pull euro amounts out of a promo label like "2 voor 5,00" or "voor 0,99". */
+export function parseAmounts(raw) {
+  if (!raw) return [];
+  const decimals = [...raw.matchAll(/(\d+)[.,](\d{2})\b/g)].map((m) => Number(`${m[1]}.${m[2]}`));
+  return decimals.filter((n) => Number.isFinite(n) && n > 0);
 }
 
 /**
- * Turn a raw scraped tile into an OfferProduct. Jumbo promotions come in many
- * shapes ("van €4.99 voor €3.99", "2 voor €3", "25% korting", "1+1 gratis"),
- * so this is best-effort: it always keeps the original promotion text as the
- * discountLabel, and derives regular/offer prices when it reasonably can.
+ * Turn a raw scraped tile into an OfferProduct. The Jumbo overview page gives
+ * a promotion label but no regular price, so this keeps the label as
+ * `discountLabel` and does a best-effort price parse:
+ *   - "N voor T,TT"  -> offerPrice = T/N (per-unit),         regularPrice = offerPrice
+ *   - "voor P,PP"    -> offerPrice = P,PP,                   regularPrice = offerPrice
+ *   - "PP,PP per ..." -> offerPrice = first amount,          regularPrice = offerPrice
+ *   - "25% korting"  -> offerPrice = 0 (unknown), label carries the discount
+ *   - "1+1 gratis"   -> offerPrice = 0 (unknown), label carries the discount
  */
-export function normalize(raw, week) {
+export function normalize(raw) {
   const promoText = (raw.promoText || '').replace(/\s+/g, ' ').trim();
-  const priceText = (raw.priceText || '').replace(/\s+/g, ' ').trim();
-
-  // Parse the shelf price and the promo text separately: a "2 voor €3" promo
-  // total shouldn't be mistaken for the item's regular price.
-  const shelfAmounts = parsePrices(priceText).amounts ?? [];
-  const allAmounts = [...shelfAmounts, ...(parsePrices(promoText).amounts ?? [])];
-  let regularPrice = 0;
+  const amounts = parseAmounts(promoText);
   let offerPrice = 0;
 
-  const percentMatch = promoText.match(/(\d{1,2})\s*%/);
-  const multiBuyMatch = promoText.match(/(\d+)\s*(?:voor|halen.*betalen|=)\s*€?\s*(\d+[.,]?\d*)/i);
-
-  if (multiBuyMatch) {
-    const qty = Number(multiBuyMatch[1]) || 1;
-    const total = Number(multiBuyMatch[2].replace(',', '.'));
+  const multiBuy = promoText.match(/(\d+)\s*voor\s*€?\s*(\d+[.,]\d{2})/i);
+  if (multiBuy) {
+    const qty = Number(multiBuy[1]) || 1;
+    const total = Number(multiBuy[2].replace(',', '.'));
     offerPrice = Math.round((total / qty) * 100) / 100;
-    regularPrice = shelfAmounts.length ? Math.max(...shelfAmounts) : offerPrice;
-  } else if (allAmounts.length >= 2) {
-    const sorted = [...allAmounts].sort((a, b) => a - b);
-    offerPrice = sorted[0];
-    regularPrice = sorted[sorted.length - 1];
-  } else if (allAmounts.length === 1) {
-    offerPrice = allAmounts[0];
-    if (percentMatch) {
-      const pct = Number(percentMatch[1]);
-      regularPrice = pct < 100 ? Math.round((offerPrice / (1 - pct / 100)) * 100) / 100 : offerPrice;
-    } else {
-      regularPrice = offerPrice;
-    }
+  } else if (amounts.length >= 1) {
+    // "voor 0,99" or "0,69 per 100 gram" — take the (single) listed price.
+    offerPrice = amounts[0];
   }
 
-  const category = categoryFor(`${raw.name} ${raw.category || ''}`);
-  const discountLabel = promoText || (percentMatch ? `-${percentMatch[1]}%` : 'Aanbieding');
+  const aisle = (raw.category || '').trim() || 'Overig';
 
   return {
     id: raw.id || slug(raw.name) || `offer-${Math.random().toString(36).slice(2, 8)}`,
-    name: raw.name?.trim() || 'Onbekend product',
-    category,
+    name: (raw.name || '').trim() || 'Onbekend product',
+    category: aisle,
     unit: (raw.unit || '').trim() || 'per stuk',
-    regularPrice,
+    regularPrice: offerPrice,
     offerPrice,
-    discountLabel,
-    validFrom: raw.validFrom || week.validFrom,
-    validUntil: raw.validUntil || week.validUntil,
-    imageEmoji: CATEGORY_EMOJI[category] || '🛒',
+    discountLabel: promoText || 'Aanbieding',
+    validFrom: raw.validFrom || '',
+    validUntil: raw.validUntil || '',
+    imageEmoji: emojiForAisle(aisle),
     ...(raw.imageUrl ? { imageUrl: raw.imageUrl } : {}),
     ...(raw.productUrl ? { productUrl: raw.productUrl } : {}),
   };
+}
+
+/**
+ * DOM extraction: runs inside the page. Walks each aisle section and pulls the
+ * offer tiles out of it, tagging each with the aisle name from the section
+ * heading. Returns an array of raw offers (still strings, un-normalized).
+ */
+export async function extractFromDom(page, selectors) {
+  return page.evaluate((sel) => {
+    const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const results = [];
+    const seen = new Set();
+
+    const sections = Array.from(document.querySelectorAll(sel.section));
+    for (const section of sections) {
+      const heading = section.querySelector(sel.sectionTitle);
+      const category = heading ? clean(heading.textContent) : '';
+      // Skip the outer wrapper section (its heading is "Per gangpad"); only
+      // inner sections carry a real aisle name and tiles.
+      const tiles = Array.from(section.querySelectorAll(sel.tile));
+      for (const tile of tiles) {
+        const id = tile.getAttribute('id') || '';
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
+
+        const linkEl = tile.querySelector(sel.link);
+        const imgEl = tile.querySelector(sel.image);
+        const tagEl = tile.querySelector(sel.tag);
+        const lowerEl = tagEl ? tagEl.querySelector(sel.tagLower) : null;
+
+        const name = clean(linkEl ? linkEl.textContent : imgEl ? imgEl.getAttribute('alt') : '');
+        const promoText = clean(lowerEl ? lowerEl.textContent : tagEl ? tagEl.textContent : '');
+
+        results.push({
+          id,
+          name,
+          promoText,
+          category,
+          validFrom: tile.getAttribute('start-date') || '',
+          validUntil: tile.getAttribute('expiration-date') || '',
+          imageUrl: imgEl ? imgEl.getAttribute('src') || '' : '',
+          productUrl: linkEl ? linkEl.getAttribute('href') || '' : '',
+        });
+      }
+    }
+    return results;
+  }, selectors);
 }
 
 async function acceptCookies(page) {
@@ -232,8 +230,6 @@ async function acceptCookies(page) {
 }
 
 async function autoScroll(page) {
-  // Jumbo lazy-loads tiles as you scroll. Keep scrolling until the height stops
-  // growing (or we hit a sane cap).
   let previousHeight = 0;
   for (let i = 0; i < 40; i++) {
     const height = await page.evaluate(() => document.body.scrollHeight);
@@ -245,103 +241,12 @@ async function autoScroll(page) {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-/** DOM extraction: run inside the page and pull text out of each offer tile. */
-async function extractFromDom(page, selectors) {
-  return page.evaluate((sel) => {
-    const pickText = (root, candidates) => {
-      for (const c of candidates) {
-        const el = root.querySelector(c);
-        const text = el?.textContent?.trim();
-        if (text) return text;
-      }
-      return '';
-    };
-
-    let tiles = [];
-    for (const tileSel of sel.tile) {
-      const found = Array.from(document.querySelectorAll(tileSel));
-      if (found.length >= 3) {
-        tiles = found;
-        break;
-      }
-    }
-
-    return tiles.map((tile) => {
-      const name = pickText(tile, sel.name);
-      const priceText = pickText(tile, sel.price);
-      const promoText = pickText(tile, sel.promo);
-      const img = sel.image.map((s) => tile.querySelector(s)).find(Boolean);
-      const link = sel.link.map((s) => tile.querySelector(s)).find(Boolean);
-      return {
-        name,
-        priceText,
-        promoText,
-        unit: tile.getAttribute('data-unit') || '',
-        imageUrl: img?.getAttribute('src') || img?.getAttribute('data-src') || '',
-        productUrl: link?.getAttribute('href') || '',
-      };
-    });
-  }, selectors);
-}
-
-/**
- * Try to read structured data straight out of Next.js's embedded JSON. This is
- * far more reliable than DOM scraping *when it's present* — but the exact path
- * to the promotions array changes between Jumbo releases, so we search the blob
- * for objects that look like products rather than hard-coding a path.
- */
-async function extractFromNextData(page) {
-  const nextData = await page.evaluate(() => {
-    const el = document.querySelector('#__NEXT_DATA__');
-    if (!el?.textContent) return null;
-    try {
-      return JSON.parse(el.textContent);
-    } catch {
-      return null;
-    }
-  });
-  if (!nextData) return [];
-
-  const results = [];
-  const seen = new Set();
-  const looksLikeProduct = (o) =>
-    o && typeof o === 'object' && typeof o.title === 'string' &&
-    (o.prices || o.price || o.promotion || o.currentPrice);
-
-  const walk = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    if (looksLikeProduct(node) && !seen.has(node.title)) {
-      seen.add(node.title);
-      const priceObj = node.prices || node.price || node.currentPrice || {};
-      const price =
-        typeof priceObj === 'number'
-          ? priceObj
-          : priceObj.price ?? priceObj.amount ?? priceObj.now ?? '';
-      const wasPrice = priceObj.was ?? priceObj.original ?? priceObj.regular ?? '';
-      const promo = node.promotion?.tags?.map((t) => t.text).join(' ') ||
-        node.promotion?.name || node.promotionLabel || '';
-      results.push({
-        id: node.sku || node.id || '',
-        name: node.title,
-        priceText: `${wasPrice} ${price}`,
-        promoText: String(promo),
-        unit: node.quantity || node.unit || node.subtitle || '',
-        imageUrl: node.image || node.imageUrl || node.images?.[0]?.url || '',
-        productUrl: node.link || node.url || '',
-      });
-    }
-    Object.values(node).forEach(walk);
-  };
-  walk(nextData);
-  return results;
-}
-
 async function main() {
-  log(`opening ${OFFERS_URL}`);
+  const target = FROM_FILE
+    ? pathToFileURL(isAbsolute(FROM_FILE) ? FROM_FILE : resolve(process.cwd(), FROM_FILE)).href
+    : OFFERS_URL;
+  log(`opening ${target}`);
+
   const browser = await chromium.launch({
     headless: !HEADED,
     ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
@@ -357,52 +262,38 @@ async function main() {
   const page = await context.newPage();
 
   try {
-    await page.goto(OFFERS_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await acceptCookies(page);
-    await page.waitForTimeout(1500);
-    await autoScroll(page);
+    await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (!FROM_FILE) {
+      await acceptCookies(page);
+      await page.waitForTimeout(1500);
+      await autoScroll(page);
+    }
 
     if (DEBUG) {
       await mkdir(DEBUG_DIR, { recursive: true });
       await writeFile(resolve(DEBUG_DIR, 'page.html'), await page.content());
-      await page.screenshot({ path: resolve(DEBUG_DIR, 'page.png'), fullPage: true });
-      const nextRaw = await page.evaluate(
-        () => document.querySelector('#__NEXT_DATA__')?.textContent || '',
-      );
-      await writeFile(resolve(DEBUG_DIR, 'next-data.json'), nextRaw || '(no __NEXT_DATA__ found)');
+      await page.screenshot({ path: resolve(DEBUG_DIR, 'page.png'), fullPage: true }).catch(() => {});
       log(`debug artifacts written to ${DEBUG_DIR}`);
     }
 
-    log('trying __NEXT_DATA__ strategy…');
-    let raw = await extractFromNextData(page);
-    log(`  __NEXT_DATA__ yielded ${raw.length} products`);
+    const raw = await extractFromDom(page, SELECTORS);
+    log(`extracted ${raw.length} tiles from the DOM`);
 
-    if (raw.length < 3) {
-      log('falling back to DOM strategy…');
-      raw = await extractFromDom(page, SELECTORS);
-      log(`  DOM yielded ${raw.length} products`);
-    }
-
-    const week = currentWeekRange();
-    const offers = raw
-      .filter((r) => r.name && r.name.length > 1)
-      .map((r) => normalize(r, week));
-
-    // De-dupe by id, keeping the first occurrence.
     const byId = new Map();
-    for (const offer of offers) {
+    for (const r of raw.filter((x) => x.name && x.name.length > 1)) {
+      const offer = normalize(r);
       if (!byId.has(offer.id)) byId.set(offer.id, offer);
     }
-    const finalOffers = [...byId.values()];
+    const offers = [...byId.values()];
 
-    if (finalOffers.length === 0) {
-      log('⚠️  No offers extracted. Run again with --debug and inspect');
-      log('   scraper/debug/page.html to update the selectors in SELECTORS.');
+    if (offers.length === 0) {
+      log('⚠️  No offers extracted. Re-run with --debug and inspect');
+      log('   scraper/debug/page.html to update the SELECTORS block.');
       process.exitCode = 1;
     }
 
-    await writeFile(OUTPUT_FILE, JSON.stringify(finalOffers, null, 2) + '\n');
-    log(`wrote ${finalOffers.length} offers to ${OUTPUT_FILE}`);
+    await writeFile(OUTPUT_FILE, JSON.stringify(offers, null, 2) + '\n');
+    log(`wrote ${offers.length} offers to ${OUTPUT_FILE}`);
   } finally {
     await browser.close();
   }

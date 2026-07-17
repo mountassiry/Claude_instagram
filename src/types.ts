@@ -9,7 +9,12 @@ export type ProductCategory =
 export interface OfferProduct {
   id: string;
   name: string;
-  category: ProductCategory;
+  /**
+   * A grocery aisle/category. The built-in mock data uses the `ProductCategory`
+   * values above; the Jumbo scraper passes through Jumbo's own aisle names
+   * (e.g. "Aardappelen, groente en fruit"), so this is a plain string.
+   */
+  category: string;
   unit: string;
   regularPrice: number;
   offerPrice: number;
