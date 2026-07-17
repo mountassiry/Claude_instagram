@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Every signed-in user can read the whole shared recipe library, but can
+    // only create recipes attributed to themselves and only edit/delete
+    // their own.
+    match /recipes/{recipeId} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.servings is int
+        && request.resource.data.servings > 0
+        && request.resource.data.servings <= 100
+        && request.resource.data.prepMinutes is int
+        && request.resource.data.prepMinutes > 0
+        && request.resource.data.prepMinutes <= 1440
+        && request.resource.data.ingredients is list
+        && request.resource.data.ingredients.size() <= 50
+        && request.resource.data.steps is list
+        && request.resource.data.steps.size() <= 50
+        && request.resource.data.isCustom == true;
+
+      allow update: if request.auth != null
+        && resource.data.authorId == request.auth.uid
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.ingredients is list
+        && request.resource.data.ingredients.size() <= 50
+        && request.resource.data.steps is list
+        && request.resource.data.steps.size() <= 50;
+
+      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+    }
+  }
+}

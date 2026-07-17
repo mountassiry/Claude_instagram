@@ -1,306 +1,93 @@
-# Family Circle
+# Weekly Recipes — Jumbo Offers
 
-A secure, invite-only family photo and video sharing app built with React Native and Firebase. Share precious moments with your loved ones in a private, controlled environment.
+A web app for creating your own recipes and getting **10 recipe suggestions every week** built around whatever products are currently on offer at Jumbo, so you can order the ingredients for delivery.
 
-## Features
+## How it works
 
-### Core Features
-- **Photo & Video Sharing**: Share photos and videos with your family
-- **Instagram-like Feed**: Beautiful, familiar interface for viewing shared content
-- **Likes & Comments**: Interact with family posts
-- **Camera Integration**: Take photos/videos directly or choose from gallery
+- **Login** — the whole app is behind a login wall (email/password or Google). Everyone who logs in shares the same recipe library.
+- **This Week** — ranks all recipes (everyone's + starter recipes) by how many ingredients are on this week's offers, and shows the top 10, with the savings for each.
+- **Offers** — browse this week's full offer catalog by category.
+- **Recipe Library** — every recipe anyone has created, visible to all users. You can edit or delete your own; everyone else's are view-only.
+- **Shopping List** — collect the on-offer ingredients for a recipe you want to cook, check them off, and jump straight to a Jumbo search page for each product to add it to your Jumbo order.
 
-### Security & Privacy
-- **Invite-Only Access**: No one can join without a valid invite code
-- **Admin Controls**: Full control over who can access the family circle
-- **User Management**: Activate/deactivate members, promote admins
-- **Private by Design**: All content stays within your family
+## About the Jumbo data
 
-### Admin Features
-- **Invite Code Management**: Generate and manage invite codes
-- **Member Management**: View all members, change roles, remove users
-- **Content Moderation**: Delete any inappropriate posts
+Jumbo has no official public API for third-party apps to read weekly offers or place orders. This app currently runs on **mock offer data** (`src/data/offerProducts.ts`) standing in for a real weekly-offers feed, so the whole app can be built and used end-to-end.
 
-## Tech Stack
+Ordering itself is not automated — "Open in Jumbo" links just open a Jumbo product search (`jumbo.com/zoeken?searchTerms=...`) in a new tab; you add the item to your Jumbo cart and check out there yourself.
 
-- **Frontend**: React Native with Expo
-- **Backend**: Firebase (Authentication, Firestore, Storage)
-- **Platforms**: iOS, Android
+If real offer data becomes available later (an approved partner API, or manually curated data entered by an admin), only `getThisWeeksOffers()` in `src/data/offerProducts.ts` needs to change — every other part of the app (matching, ranking, UI) already consumes plain `OfferProduct[]` data and doesn't care where it came from.
 
-## Getting Started
+## Tech stack
 
-### Prerequisites
+- React + TypeScript + Vite
+- react-router-dom for routing
+- **Firebase Authentication** (email/password + Google) — the app requires login
+- **Firebase Firestore** — the shared recipe library, synced in real time; each recipe is attributed to its author, who is the only one who can edit or delete it
+- Shopping list is saved in the browser's `localStorage` (it's a personal scratch list, not shared)
 
-- Node.js 18+
-- npm or yarn
-- Expo CLI (`npm install -g expo-cli`)
-- Firebase account
-- Expo Go app on your phone (for testing)
+## Getting started
 
-### Firebase Setup
+### Firebase setup
 
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Create a new project
-3. Enable the following services:
-   - **Authentication**: Enable Email/Password sign-in
-   - **Firestore Database**: Create in production mode
-   - **Storage**: Set up Cloud Storage
+1. Go to the [Firebase Console](https://console.firebase.google.com) and create a project.
+2. **Authentication** (Build > Authentication > Get started) — enable the **Email/Password** and **Google** sign-in providers.
+3. **Firestore Database** (Build > Firestore Database > Create database).
+4. Deploy the security rules in `firestore.rules` (Firestore Database > Rules, paste the file's contents, publish). These require a signed-in user for every read/write, and only let someone edit or delete recipes they authored.
+5. Project Settings > General > Your apps > Add app > Web, then copy the config values.
+6. Copy `.env.example` to `.env` and fill in the values from step 5:
 
-4. Get your Firebase config:
-   - Go to Project Settings > General > Your apps
-   - Click "Add app" and select Web
-   - Copy the firebaseConfig object
-
-5. Update `src/config/firebase.ts` with your config:
-```javascript
-const firebaseConfig = {
-  apiKey: "your-api-key",
-  authDomain: "your-project-id.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.appspot.com",
-  messagingSenderId: "your-sender-id",
-  appId: "your-app-id"
-};
-```
-
-### Firestore Security Rules
-
-Add these security rules to your Firestore Database:
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Helper function to check if user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Helper function to check if user is admin
-    function isAdmin() {
-      return isAuthenticated() &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    // Helper function to check if user is active
-    function isActive() {
-      return isAuthenticated() &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
-    }
-
-    // Users collection
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAdmin() || request.auth.uid == userId;
-      allow delete: if isAdmin();
-    }
-
-    // Posts collection
-    match /posts/{postId} {
-      allow read: if isActive();
-      allow create: if isActive();
-      allow update: if isActive() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isActive() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // Comments collection
-    match /comments/{commentId} {
-      allow read: if isActive();
-      allow create: if isActive();
-      allow delete: if isActive() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // Invites collection
-    match /invites/{inviteId} {
-      allow read: if isAdmin() || !resource.data.isUsed;
-      allow create: if isAdmin();
-      allow update: if isAuthenticated();
-      allow delete: if isAdmin();
-    }
-  }
-}
-```
-
-### Storage Security Rules
-
-Add these rules to your Firebase Storage:
-
-```javascript
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /posts/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
-      allow delete: if request.auth != null;
-    }
-  }
-}
-```
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd family-circle
+cp .env.example .env
 ```
 
-2. Install dependencies:
+### Run the app
+
 ```bash
 npm install
+npm run dev
 ```
 
-3. Create the first invite code:
+Then open the printed local URL in your browser.
+
+### Developing without a real Firebase project
+
+You can run against local Firebase emulators instead of a real project — no Firebase account needed:
+
 ```bash
-# Update the Firebase config in scripts/createFirstInvite.js first
-node scripts/createFirstInvite.js
+npm install -g firebase-tools   # if you don't have it
+firebase emulators:start --only firestore,auth
 ```
 
-4. Start the development server:
+Then set `VITE_USE_FIREBASE_EMULATOR=true` in `.env` (the other `VITE_FIREBASE_*` values can be any placeholder strings when only using the emulators). Google sign-in against the emulator uses a fake IDP picker instead of a real Google account.
+
+### Other scripts
+
 ```bash
-npm start
-# or
-expo start
+npm run build     # type-check and build for production
+npm run preview   # preview the production build
+npm run lint       # run eslint
 ```
 
-5. Scan the QR code with Expo Go (Android) or Camera app (iOS)
-
-### Building for Production
-
-#### Android
-```bash
-expo build:android
-# or with EAS Build
-eas build --platform android
-```
-
-#### iOS
-```bash
-expo build:ios
-# or with EAS Build
-eas build --platform ios
-```
-
-## Project Structure
+## Project structure
 
 ```
-├── App.tsx                 # App entry point
-├── src/
-│   ├── components/         # Reusable UI components
-│   │   ├── Avatar.tsx
-│   │   ├── Button.tsx
-│   │   ├── Input.tsx
-│   │   ├── PostCard.tsx
-│   │   ├── LoadingScreen.tsx
-│   │   └── EmptyState.tsx
-│   ├── config/
-│   │   ├── firebase.ts     # Firebase configuration
-│   │   └── constants.ts    # App constants and theme
-│   ├── contexts/
-│   │   └── AuthContext.tsx # Authentication context
-│   ├── hooks/
-│   │   ├── usePosts.ts     # Posts and comments hooks
-│   │   ├── useInvites.ts   # Invite management hook
-│   │   └── useUsers.ts     # User management hook
-│   ├── navigation/
-│   │   └── AppNavigator.tsx # Navigation setup
-│   ├── screens/
-│   │   ├── auth/
-│   │   │   ├── LoginScreen.tsx
-│   │   │   └── RegisterScreen.tsx
-│   │   ├── main/
-│   │   │   ├── FeedScreen.tsx
-│   │   │   ├── CreatePostScreen.tsx
-│   │   │   ├── CommentsScreen.tsx
-│   │   │   ├── ProfileScreen.tsx
-│   │   │   └── SettingsScreen.tsx
-│   │   └── admin/
-│   │       ├── ManageUsersScreen.tsx
-│   │       └── InviteCodesScreen.tsx
-│   ├── types/
-│   │   └── index.ts        # TypeScript type definitions
-│   └── utils/
-│       └── helpers.ts      # Utility functions
-├── scripts/
-│   └── createFirstInvite.js # Bootstrap script
-└── assets/                 # App icons and splash screen
+src/
+├── data/
+│   ├── offerProducts.ts   # mock weekly Jumbo offers — swap for a real source here
+│   └── starterRecipes.ts  # seed recipes so the weekly picks aren't empty on first run
+├── config/
+│   └── firebase.ts         # Firebase app + Firestore + Auth initialization
+├── contexts/
+│   └── AuthContext.tsx     # signed-in user state, sign up / log in / log out
+├── hooks/
+│   ├── useRecipes.ts       # shared recipe library CRUD, persisted to Firestore
+│   └── useShoppingList.ts  # shopping list state, persisted to localStorage
+├── utils/
+│   ├── matching.ts         # ranks recipes by how many ingredients are on offer
+│   └── week.ts             # current Jumbo offer week (Mon–Sun) helpers
+├── components/             # NavBar, RecipeCard
+├── pages/                  # LoginPage, HomePage, OffersPage, MyRecipesPage (Recipe Library), RecipeFormPage, RecipeDetailPage, ShoppingListPage
+├── App.tsx                 # routes + login gate
+└── main.tsx                # entry point
 ```
-
-## Usage Guide
-
-### First-Time Setup
-
-1. Run the `createFirstInvite.js` script to generate the first invite code
-2. Register using the invite code - you'll automatically become an admin
-3. Generate invite codes for family members from Settings > Invite Codes
-
-### For Admins
-
-- **Generate Invites**: Settings > Invite Codes > Create New Invite Code
-- **Manage Members**: Settings > Manage Members
-- **Deactivate Users**: Tap on a user > Deactivate User
-- **Promote to Admin**: Tap on a user > Make Admin
-- **Remove Users**: Tap on a user > Remove User (permanent)
-
-### For All Members
-
-- **View Feed**: Home tab shows all family posts
-- **Create Post**: Tap the + tab, select photo/video, add caption
-- **Like Posts**: Tap the heart icon on any post
-- **Comment**: Tap the comment icon, type your comment
-- **Delete Own Posts**: Tap the trash icon on your posts
-
-## Security Considerations
-
-- All data is stored in Firebase with security rules enforcing access control
-- Only invited members can join the family circle
-- Admins can deactivate or remove members at any time
-- Deactivated users cannot log in or access any content
-- Media is stored securely in Firebase Storage with access rules
-
-## Customization
-
-### Theming
-
-Edit `src/config/constants.ts` to customize:
-- Colors
-- Spacing
-- Font sizes
-- Border radius
-- Other UI constants
-
-### App Name and Icons
-
-1. Update `app.json` with your app name
-2. Replace images in `assets/` folder:
-   - `icon.png` (1024x1024)
-   - `splash.png` (1284x2778)
-   - `adaptive-icon.png` (1024x1024)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Invalid or expired invite code"**
-   - Check that the code hasn't been used
-   - Check that the code hasn't expired (7 days by default)
-
-2. **"Account deactivated"**
-   - Contact the admin to reactivate your account
-
-3. **Images not loading**
-   - Check Firebase Storage rules
-   - Ensure the user is authenticated
-
-4. **Push notifications not working**
-   - Push notifications require additional setup with Firebase Cloud Messaging
-
-## Contributing
-
-Contributions are welcome! Please read the contributing guidelines before submitting a pull request.
-
-## License
-
-This project is private and intended for family use.
