@@ -36,6 +36,8 @@ export interface Recipe {
   ingredients: RecipeIngredient[];
   steps: string[];
   isCustom: boolean;
+  authorId?: string;
+  authorName?: string;
 }
 
 export interface MatchedIngredient extends RecipeIngredient {

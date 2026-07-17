@@ -7,14 +7,35 @@ import { MyRecipesPage } from './pages/MyRecipesPage';
 import { RecipeFormPage } from './pages/RecipeFormPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { ShoppingListPage } from './pages/ShoppingListPage';
+import { LoginPage } from './pages/LoginPage';
 import { useRecipes } from './hooks/useRecipes';
 import { useShoppingList } from './hooks/useShoppingList';
+import { useAuth } from './contexts/AuthContext';
 import { getThisWeeksOffers } from './data/offerProducts';
 
 export default function App() {
+  const { user, isLoading: isAuthLoading } = useAuth();
   const offers = useMemo(() => getThisWeeksOffers(), []);
   const { allRecipes, addRecipe, updateRecipe, deleteRecipe, isLoading, error } = useRecipes();
   const shoppingList = useShoppingList();
+
+  if (isAuthLoading) {
+    return (
+      <div className="app">
+        <main className="app__content">
+          <p>Loading…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="app">
+        <LoginPage />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -35,7 +56,14 @@ export default function App() {
           />
           <Route
             path="/recipes/:id"
-            element={<RecipeDetailPage recipes={allRecipes} offers={offers} onAddToShoppingList={shoppingList.addItems} />}
+            element={
+              <RecipeDetailPage
+                recipes={allRecipes}
+                offers={offers}
+                onAddToShoppingList={shoppingList.addItems}
+                onDelete={deleteRecipe}
+              />
+            }
           />
           <Route path="/shopping-list" element={<ShoppingListPage shoppingList={shoppingList} />} />
         </Routes>

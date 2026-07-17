@@ -16,6 +16,7 @@ export function RecipeCard({ recipe, ranked }: RecipeCardProps) {
         <div className="recipe-card__meta">
           <span>⏱ {recipe.prepMinutes} min</span>
           <span>🍽 {recipe.servings} servings</span>
+          {recipe.isCustom && recipe.authorName && <span>by {recipe.authorName}</span>}
         </div>
         {ranked && (
           <div className="recipe-card__offer-info">

@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import type { OfferProduct, Recipe, RecipeIngredient } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface RecipeFormPageProps {
   recipes?: Recipe[];
@@ -16,6 +17,7 @@ function emptyIngredient(): RecipeIngredient {
 export function RecipeFormPage({ recipes, offers, onCreate, onUpdate }: RecipeFormPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const existing = id ? recipes?.find((r) => r.id === id) : undefined;
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -29,6 +31,23 @@ export function RecipeFormPage({ recipes, offers, onCreate, onUpdate }: RecipeFo
     existing?.ingredients ?? [emptyIngredient()],
   );
   const [steps, setSteps] = useState<string[]>(existing?.steps ?? ['']);
+
+  useEffect(() => {
+    if (!existing) return;
+    setTitle(existing.title);
+    setDescription(existing.description);
+    setServings(existing.servings);
+    setPrepMinutes(existing.prepMinutes);
+    setImageEmoji(existing.imageEmoji);
+    setIngredients(existing.ingredients.length ? existing.ingredients : [emptyIngredient()]);
+    setSteps(existing.steps.length ? existing.steps : ['']);
+    // Only re-sync when we start editing a different recipe, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing?.id]);
+
+  if (existing && existing.authorId !== user?.uid) {
+    return <Navigate to={`/recipes/${existing.id}`} replace />;
+  }
 
   const updateIngredient = (index: number, patch: Partial<RecipeIngredient>) => {
     setIngredients((prev) => prev.map((ing, i) => (i === index ? { ...ing, ...patch } : ing)));
@@ -55,10 +74,14 @@ export function RecipeFormPage({ recipes, offers, onCreate, onUpdate }: RecipeFo
     setSaveError(null);
     try {
       if (existing) {
-        await onUpdate?.({ ...recipeData, id: existing.id });
+        await onUpdate?.({ ...recipeData, id: existing.id, authorId: existing.authorId, authorName: existing.authorName });
         navigate(`/recipes/${existing.id}`);
       } else {
-        const newId = await onCreate?.(recipeData);
+        const newId = await onCreate?.({
+          ...recipeData,
+          authorId: user?.uid,
+          authorName: user?.displayName || user?.email || 'Someone',
+        });
         navigate(`/recipes/${newId}`);
       }
     } catch (err) {

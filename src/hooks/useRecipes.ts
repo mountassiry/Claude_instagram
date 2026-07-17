@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateD
 import type { Recipe } from '../types';
 import { STARTER_RECIPES } from '../data/starterRecipes';
 import { db } from '../config/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const RECIPES_COLLECTION = 'recipes';
 
@@ -12,11 +13,24 @@ function sanitize<T>(value: T): T {
 }
 
 export function useRecipes() {
+  const { user } = useAuth();
   const [customRecipes, setCustomRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Firestore rules require an authenticated reader. Subscribing before login
+  // resolves — or reusing a subscription across a login/logout transition —
+  // gets a permission-denied that Firestore never auto-retries, so this
+  // effect is keyed on the signed-in user's uid and only runs once there is one.
   useEffect(() => {
+    if (!user) {
+      setCustomRecipes([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
     const recipesQuery = query(collection(db, RECIPES_COLLECTION), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(
       recipesQuery,
@@ -33,7 +47,7 @@ export function useRecipes() {
       },
     );
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   const addRecipe = async (recipe: Omit<Recipe, 'id'>): Promise<string> => {
     const docRef = await addDoc(collection(db, RECIPES_COLLECTION), { ...sanitize(recipe), createdAt: Date.now() });

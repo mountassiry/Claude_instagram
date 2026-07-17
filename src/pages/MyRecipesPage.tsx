@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Recipe } from '../types';
 import { RecipeCard } from '../components/RecipeCard';
+import { useAuth } from '../contexts/AuthContext';
 
 interface MyRecipesPageProps {
   recipes: Recipe[];
@@ -10,7 +11,9 @@ interface MyRecipesPageProps {
 }
 
 export function MyRecipesPage({ recipes, onDelete, isLoading }: MyRecipesPageProps) {
-  const custom = recipes.filter((r) => r.isCustom);
+  const { user } = useAuth();
+  const mine = recipes.filter((r) => r.isCustom && r.authorId === user?.uid);
+  const community = recipes.filter((r) => r.isCustom && r.authorId !== user?.uid);
   const starter = recipes.filter((r) => !r.isCustom);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -31,8 +34,10 @@ export function MyRecipesPage({ recipes, onDelete, isLoading }: MyRecipesPagePro
     <div className="page">
       <div className="page__header page__header--row">
         <div>
-          <h1>My Recipes</h1>
-          <p className="page__subtitle">Create your own recipes so they can be picked for future weekly offers.</p>
+          <h1>Recipe Library</h1>
+          <p className="page__subtitle">
+            Every recipe anyone has added, shared by everyone — create your own to add it to the library.
+          </p>
         </div>
         <Link to="/recipes/new" className="button button--primary">
           + New Recipe
@@ -44,12 +49,12 @@ export function MyRecipesPage({ recipes, onDelete, isLoading }: MyRecipesPagePro
       <section>
         <h2>Your recipes</h2>
         {isLoading ? (
-          <p>Loading your recipes…</p>
-        ) : custom.length === 0 ? (
+          <p>Loading recipes…</p>
+        ) : mine.length === 0 ? (
           <p>You haven't created any recipes yet.</p>
         ) : (
           <div className="recipe-grid">
-            {custom.map((recipe) => (
+            {mine.map((recipe) => (
               <div key={recipe.id} className="recipe-card-wrapper">
                 <RecipeCard recipe={recipe} />
                 <div className="recipe-card-wrapper__actions">
@@ -69,6 +74,17 @@ export function MyRecipesPage({ recipes, onDelete, isLoading }: MyRecipesPagePro
           </div>
         )}
       </section>
+
+      {community.length > 0 && (
+        <section>
+          <h2>From the community</h2>
+          <div className="recipe-grid">
+            {community.map((recipe) => (
+              <RecipeCard key={recipe.id} recipe={recipe} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2>Starter recipes</h2>
